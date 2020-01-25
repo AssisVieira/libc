@@ -1,0 +1,82 @@
+.body{
+    overflow:auto;
+    margin: 0;
+    padding: 0;
+    background: #fff url('../imgs/bg.jpg') top center no-repeat;
+		}
+
+.body2{
+    overflow:auto;
+    margin: 0;
+    padding: 0;
+    background: #fff url('../imgs/bg2.jpg') top center no-repeat;
+		}
+
+.body3{
+    overflow:auto;
+    margin: 0;
+    padding: 0;
+    background: #fff url('../imgs/bg3.jpg') top center no-repeat;
+    }
+
+.body4{
+    overflow:auto;
+    margin: 0;
+    padding: 0;
+    background: #fff url('../imgs/bg4.jpg') top center no-repeat;
+    }
+
+.body5{
+    overflow:auto;
+    margin: 0;
+    padding: 0;
+    background: #fff url('../imgs/bg5.jpg') top center no-repeat;
+    }
+
+
+
+.area {
+    display: block;
+    width: 960px;
+    height: 4917px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.area2 {
+    display: block;
+    width: 960px;
+    height: 2521px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.area3 {
+    display: block;
+    width: 960px;
+    height: 2394px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.area4 {
+    display: block;
+    width: 960px;
+    height: 1808px;
+    margin: 0 auto;
+    padding: 0;
+}
+.area5 {
+    display: block;
+    width: 960px;
+    height: 2351px;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.barrafixa{
+  width:100%; height:92px;
+  position:fixed; top:0px; left:0px;
+  background:url(../imgs/menubar.png) bottom center no-repeat;
+  z-index:200;
+}
