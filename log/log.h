@@ -107,6 +107,20 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define LOG_IGNORE_MAX 255
+#define LOG_MODULE_NAME_MAX 32
+
+/**
+ * Níveis de granularidade do log.
+ */
+typedef enum LogLevel {
+  LOG_ERRO = 0,
+  LOG_WARN,
+  LOG_INFO,
+  LOG_TRAC,
+  LOG_DBUG,
+} LogLevel;
+
 /**
  * Protótipo da função que deve ser implemetada pelo filtro de log.
  *
@@ -174,12 +188,20 @@ void log_info(const char *module, const char *fmt, ...);
 void log_warn(const char *module, const char *fmt, ...);
 
 /**
- * Registra log de depuração sobre o sistema.
+ * Registra log de trace do sistema.
  *
  * A formatação da mensagem segue a mesma especificação da função fprintf().
  *
- * Para habilitar essa função é preciso fornecer a macro DEBUG nos parâmetros
- * da compilação. Caso contrário, os registros de debug serão ignorados.
+ * @param module  nome do módulo que está originando o registro do log.
+ * @param fmt     string de formatação da mensagem do log.
+ * @param VARARGS argumentos a serem usados na formatação da mensagem do log.
+ */
+void log_trac(const char *module, const char *fmt, ...);
+
+/**
+ * Registra log de depuração sobre o sistema.
+ *
+ * A formatação da mensagem segue a mesma especificação da função fprintf().
  *
  * @param module  nome do módulo que está originando o registro do log.
  * @param fmt     string de formatação da mensagem do log.
@@ -229,6 +251,14 @@ void log_erro(const char *module, const char *fmt, ...);
  *                filtro configurado anteriormente, apenas informe NULL.
  */
 void log_filter(LogFilter filter);
+
+/**
+ * Ignora logs de um módulo de acordo com o nível de granularidade.
+ *
+ * @param module [description]
+ * @param level  [description]
+ */
+void log_ignore(const char *module, LogLevel level);
 
 /**
  * Determina se o log deve ser exibido nas saídas padrão do console: stdout e

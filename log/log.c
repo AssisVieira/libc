@@ -17,14 +17,21 @@
 #include "log.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
+typedef struct LogIgnore {
+  char module[LOG_MODULE_NAME_MAX + 1];
+  LogLevel level;
+} LogIgnore;
+
 typedef struct Log {
   FILE *file;
-  LogFilter filter;
   bool terminal;
+  LogIgnore ignore[LOG_IGNORE_MAX];
+  int ignoreLen;
 } Log;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -32,15 +39,21 @@ typedef struct Log {
 /**
  * Inicializa a configuração do log:
  * - Sem escrita em disco;
- * - Sem filtro;
  * - Registro do log apenas na saída padrão (terminal).
+ * - Sem ignorar nenhum log;
  */
-static Log LOG = {NULL, NULL, true};
+static Log LOG = {
+    .file = NULL,
+    .terminal = true,
+    .ignore = {},
+    .ignoreLen = 0,
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static void log_log(FILE *stdfile, const char *level, const char *module,
                     const char *fmt, va_list args);
+static bool log_shouldIgnore(const char *module, LogLevel level);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -78,6 +91,9 @@ int log_close() {
 ////////////////////////////////////////////////////////////////////////////////
 
 void log_info(const char *module, const char *fmt, ...) {
+  if (log_shouldIgnore(module, LOG_INFO)) {
+    return;
+  }
   va_list(args);
   va_start(args, fmt);
   fprintf(stdout, "\e[97m");
@@ -89,6 +105,9 @@ void log_info(const char *module, const char *fmt, ...) {
 ////////////////////////////////////////////////////////////////////////////////
 
 void log_warn(const char *module, const char *fmt, ...) {
+  if (log_shouldIgnore(module, LOG_WARN)) {
+    return;
+  }
   va_list(args);
   va_start(args, fmt);
   fprintf(stdout, "\e[93m");
@@ -99,24 +118,39 @@ void log_warn(const char *module, const char *fmt, ...) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void log_trac(const char *module, const char *fmt, ...) {
+  if (log_shouldIgnore(module, LOG_TRAC)) {
+    return;
+  }
+  va_list(args);
+  va_start(args, fmt);
+  fprintf(stdout, "\e[35m");
+  log_log(stdout, "TRAC", module, fmt, args);
+  fprintf(stdout, "\e[0m");
+  va_end(args);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void log_dbug(const char *module, const char *fmt, ...) {
-#ifdef DEBUG
+  if (log_shouldIgnore(module, LOG_DBUG)) {
+    return;
+  }
   va_list(args);
   va_start(args, fmt);
   fprintf(stdout, "\e[35m");
   log_log(stdout, "DBUG", module, fmt, args);
   fprintf(stdout, "\e[0m");
   va_end(args);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void log_dbugbin(const char *module, const char *buff, size_t size,
                  const char *fmt, ...) {
-#ifdef DEBUG
-  if (LOG.filter != NULL && LOG.filter(module, fmt))
+  if (log_shouldIgnore(module, LOG_DBUG)) {
     return;
+  }
 
   va_list(args);
   va_start(args, fmt);
@@ -145,12 +179,15 @@ void log_dbugbin(const char *module, const char *buff, size_t size,
   }
 
   va_end(args);
-#endif
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void log_erro(const char *module, const char *fmt, ...) {
+  if (log_shouldIgnore(module, LOG_ERRO)) {
+    return;
+  }
+
   va_list(args);
   va_start(args, fmt);
   fprintf(stdout, "\e[91m");
@@ -161,7 +198,12 @@ void log_erro(const char *module, const char *fmt, ...) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void log_filter(LogFilter filter) { LOG.filter = filter; }
+void log_ignore(const char *module, LogLevel level) {
+  int i = LOG.ignoreLen++;
+  LOG.ignore[i].module[0] = 0;
+  strncat(LOG.ignore[i].module, module, LOG_MODULE_NAME_MAX + 1);
+  LOG.ignore[i].level = level;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -169,11 +211,20 @@ void log_terminal(bool terminal) { LOG.terminal = terminal; }
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static bool log_shouldIgnore(const char *module, LogLevel level) {
+  for (int i = 0; i < LOG.ignoreLen; i++) {
+    if (level >= LOG.ignore[i].level &&
+        strcmp(LOG.ignore[i].module, module) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 static void log_log(FILE *stdfile, const char *level, const char *module,
                     const char *fmt, va_list args) {
-  if (LOG.filter != NULL && LOG.filter(module, fmt))
-    return;
-
   if (LOG.terminal) {
     va_list args2;
     va_copy(args2, args);
