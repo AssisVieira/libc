@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "port.h"
 #include "log/log.h"
 #include "tcp.h"
@@ -86,17 +86,17 @@ static void acceptClients(TcpPort *port) {
     if (fd == -1) {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         port->clientPending = false;
-        log_dbug("port", "Tentar depois.\n");
+        log_dbug("tcp-port", "Tentar depois.\n");
         break;
       } else {
-        log_erro("port", "tcp_accept(): %d - %s\n", errno, strerror(errno));
+        log_erro("tcp-port", "tcp_accept(): %d - %s\n", errno, strerror(errno));
         return;
       }
     }
 
     port->numClients++;
 
-    log_dbug("port", "Conexão aceita [%u/%u]: %d.\n", port->numClients,
+    log_dbug("tcp-port", "Conexão aceita [%u/%u]: %d.\n", port->numClients,
              port->maxClients, fd);
 
     port->onConnected(port, fd);
