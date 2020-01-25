@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "http/assets.h"
 #include "http/http.h"
 #include "httpPeople.h"
@@ -21,7 +21,12 @@
 #include <stdbool.h>
 
 int main() {
-  log_terminal(true);
+  log_ignore("tcp", LOG_INFO);
+  log_ignore("tcp-inbox", LOG_INFO);
+  log_ignore("tcp-outbox", LOG_INFO);
+  log_ignore("tcp-port", LOG_INFO);
+  log_ignore("ioevent", LOG_INFO);
+  log_ignore("http", LOG_TRAC);
 
   if (httpAssets_init("http/exemplo/web")) {
     return -1;
@@ -29,7 +34,7 @@ int main() {
 
   http_handler("GET", "/web/(.*)", httpAssets_getFile);
 
-  http_handler("GET", "/people/search", httpPeople_search);
+  http_handler("GET", "/people/search$", httpPeople_search);
 
   return http_open("2000", 25);
 }

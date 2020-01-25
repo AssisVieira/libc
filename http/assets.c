@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "assets.h"
 #include "log/log.h"
 #include <errno.h>
@@ -55,7 +55,7 @@ static bool ehArquivo(const char *endereco) {
   int status = stat(endereco, &st_buf);
 
   if (status != 0) {
-    log_erro("web", "ehArquivo(): %d - %s\n", errno, strerror(errno));
+    log_erro("http-assets", "ehArquivo(): %d - %s\n", errno, strerror(errno));
     return false;
   }
 
@@ -67,7 +67,7 @@ static bool ehArquivo(const char *endereco) {
 
 int arquivo_abrir(const char *endereco) {
   if (!ehArquivo(endereco)) {
-    log_erro("arquivo-leitor",
+    log_erro("http-assets",
              "O endereço não se refere a um arquivo convencional: %s.\n",
              endereco);
     return -1;
@@ -79,26 +79,23 @@ int arquivo_abrir(const char *endereco) {
 ////////////////////////////////////////////////////////////////////////////////
 
 void httpAssets_getFile(HttpClient *client) {
-  log_info("web", "Tratando requisição.\n");
+  const char *uriPath = http_reqArg(client, 0);
 
-  const char *path = http_reqArg(client, 0);
-
-  if (path == NULL || *path == '\0') {
-    log_info("web", "Arquivo não especificado. Buscando pelo index.html\n");
-    path = "index.html";
+  if (uriPath == NULL || *uriPath == '\0') {
+    log_info("http-assets",
+             "Arquivo não especificado. Buscando pelo /index.html.\n");
+    uriPath = "index.html";
   }
 
-  char *arquivoEndereco = makePath(assets.dirPublico, path);
-  int fd = arquivo_abrir(arquivoEndereco);
+  char *filePath = makePath(assets.dirPublico, uriPath);
+  int fd = arquivo_abrir(filePath);
 
   if (fd < 0) {
     http_respNotFound(client, HTTP_TYPE_HTML, "");
     return;
   }
 
-  log_info("web", "Servindo: %s\n", arquivoEndereco);
-
-  http_respBegin(client, HTTP_STATUS_OK, mimeTypeByFilename(arquivoEndereco));
+  http_respBegin(client, HTTP_STATUS_OK, mimeTypeByFilename(filePath));
 
   char buff[4 * 1024];
   size_t buffSize = sizeof(buff);

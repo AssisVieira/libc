@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "http.h"
 #include "buff/buff.h"
 #include "ioevent/ioevent.h"
@@ -193,7 +193,7 @@ int http_open(const char *port, size_t maxClients) {
   int r = 0;
   bool finish = false;
 
-  log_info("http", "Inicializando servidor na porta: %s\n", port);
+  log_info("http", "Inicializando...\n");
   log_info("http", "Concorrência máxima: %d\n", maxClients);
 
   server.closing = false;
@@ -211,7 +211,7 @@ int http_open(const char *port, size_t maxClients) {
     return -1;
   }
 
-  log_info("http", "Aguardando conexões...\n");
+  log_info("http", "Aguardando conexões na porta: %s.\n", port);
 
   if (ioevent_run(&finish)) {
     log_erro("http", "Erro em ioevent_run().\n");
@@ -255,7 +255,7 @@ int http_handler(const char *method, const char *path, HttpHandlerFunc func) {
 static int http_close() {
   int r = 0;
 
-  log_info("http", "Encerrando servidor...\n");
+  log_dbug("http", "Encerrando servidor...\n");
 
   server.closing = true;
 
@@ -280,7 +280,7 @@ static int http_close() {
     regfree(&server.handlers[i].pattern);
   }
 
-  log_info("http", "Tchau!\n");
+  log_dbug("http", "Tchau!\n");
 
   return r;
 }
@@ -341,6 +341,8 @@ static void http_onRequest(HttpClient *client) {
     log_dbug("http", "Ignorando requisição: %s.\n", http_reqPath(client));
     return;
   }
+
+  log_info("http", "%s %s\n", http_reqMethod(client), http_reqPath(client));
 
   if (http_dispatch(client)) {
     log_dbug("http", "Recurso não encontrado: %s.\n", http_reqPath(client));
