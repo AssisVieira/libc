@@ -190,9 +190,9 @@ void log_erro(const char *module, const char *fmt, ...) {
 
   va_list(args);
   va_start(args, fmt);
-  fprintf(stdout, "\e[91m");
+  fprintf(stderr, "\e[91m");
   log_log(stderr, "ERRO", module, fmt, args);
-  fprintf(stdout, "\e[0m");
+  fprintf(stderr, "\e[0m");
   va_end(args);
 }
 
