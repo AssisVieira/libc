@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "ioevent.h"
 #include "log/log.h"
 #include <errno.h>
@@ -35,7 +35,6 @@ typedef struct IOEventFd {
 
 typedef struct IOEvent {
   int epoll;
-  bool edgeTriggered;
   // Vetor de Fdes, em que os índices são descritores.
   Vetor fds;
 } IOEvent;
@@ -52,7 +51,7 @@ static thread_local IOEvent ioevent;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ioevent_init(bool edgeTriggered) {
+int ioevent_open() {
   log_dbug("ioevent", "Criando ioevent...\n");
 
   EPOLL_EVENTS[IOEVENT_TYPE_READ] = EPOLLIN;
@@ -61,7 +60,6 @@ int ioevent_init(bool edgeTriggered) {
   EPOLL_EVENTS[IOEVENT_TYPE_ERROR] = EPOLLERR;
 
   ioevent.epoll = epoll_create1(0);
-  ioevent.edgeTriggered = edgeTriggered;
 
   if (ioevent.epoll == -1) {
     log_erro("ioevent", "Erro em epoll_create1(): %d - %s.\n", errno,
@@ -156,7 +154,7 @@ int ioevent_run(bool *finish) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ioevent_install(int fd) {
+int ioevent_install(int fd, bool edgeTriggered) {
   IOEventFd *desc = vetor_item(&ioevent.fds, (size_t)fd);
 
   log_dbug("ioevent", "Instalando conexão %d.\n", fd);
@@ -174,7 +172,7 @@ int ioevent_install(int fd) {
   desc->epollEvent.data.fd = fd;
   desc->epollEvent.events = 0;
 
-  if (ioevent.edgeTriggered) {
+  if (edgeTriggered) {
     desc->epollEvent.events |= EPOLLET;
   }
 

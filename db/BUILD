@@ -13,5 +13,6 @@ cc_binary(
     srcs = glob(["test.c"]),
     linkstatic = True,
     deps = [":db"],
+    data = ["logs"],
     visibility = ["//visibility:public"]
 )

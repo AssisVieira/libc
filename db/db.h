@@ -3,27 +3,28 @@
 
 #include "ioevent/ioevent.h"
 
+#define DB_SQL_PARAMS_MAX 32
+
 typedef struct DB DB;
-typedef struct DBQuery DBQuery;
 
-typedef void (*onDBConnected)(void *context);
-typedef void (*onDBError)(void *context);
-typedef void (*onDBQueryResult)(DBQuery *query, void *context);
+typedef void (*onDBCallback)(DB *db);
 
-int db_open(const char *strCon, void *context, onDBConnected onDBConnected,
-            onDBError onDBError);
+void db_open(void *context, onDBCallback onConnected, onDBCallback onError);
 
-int db_close();
+void db_close(DB *db);
 
-int db_query(const char *str, void *context, onDBQueryResult onQueryResult);
+void db_sql(DB *db, const char *sql);
 
-void db_queryClose(DBQuery *query);
+void db_clear(DB *db);
 
-const char *db_value(DBQuery *query, int nReg, int nCol);
+void db_param(DB *db, const char *value);
 
-int db_queryCount(DBQuery *query);
+void db_send(DB *db, onDBCallback onCmdResult, onDBCallback onCmdError);
 
-bool db_queryIsDone(const DBQuery *query);
-bool db_queryIsError(const DBQuery *query);
+const char *db_value(DB *db, int nReg, int nCol);
+
+void *db_context(DB *db);
+
+int db_count(DB *db);
 
 #endif

@@ -14,8 +14,8 @@
  *   limitations under the License.
  ******************************************************************************/
 
-#ifndef MONITOR_ES_H
-#define MONITOR_ES_H
+#ifndef IOEVENT_H
+#define IOEVENT_H
 
 #include "vetor/vetor.h"
 #include <stdbool.h>
@@ -33,9 +33,9 @@ typedef enum IOEventType {
 
 typedef void (*IOEventListenerFn)(void *context, int fd, IOEventType eventType);
 
-int ioevent_init(bool edgeTriggered);
+int ioevent_open();
 
-int ioevent_install(int fd);
+int ioevent_install(int fd, bool edgeTriggered);
 
 int ioevent_listen(int fd, IOEventType eventType, void *context,
                    IOEventListenerFn fnListener);
