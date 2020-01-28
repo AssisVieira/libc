@@ -46,7 +46,7 @@ int tcpInbox_init(TcpInbox *inbox, int fd, size_t size, void *ctx,
     return -1;
   }
 
-  if (ioevent_install(fd)) {
+  if (ioevent_install(fd, true)) {
     log_dbug("tcp-inbox", "(fd %d) Erro: ioevent_install().\n", inbox->fd);
     return -1;
   }

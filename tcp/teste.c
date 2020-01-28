@@ -29,7 +29,7 @@ static bool finish = false;
 int main() {
   TcpPort port;
 
-  ioevent_init(true);
+  ioevent_open();
 
   if (tcpPort_open(&port, "5000", 100, onNewClient))
     return -1;

@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "inbox.h"
 #include "log/log.h"
 #include "port.h"
@@ -22,7 +22,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-static void onNewClient(void *objListener, int fd);
+static void onNewClient(TcpPort *port, int fd);
 static void onInboxNewData(void *context, TcpInbox *inbox);
 static void onInboxError(void *context, TcpInbox *inbox);
 
@@ -31,14 +31,14 @@ static TcpInbox inbox;
 int main() {
   bool finish = false;
 
-  if (ioevent_init(true)) {
+  if (ioevent_open()) {
     perror("Error: ioevent_init()\n");
     return -1;
   }
 
   TcpPort port;
 
-  if (tcpPort_init(&port, "9000", 1, NULL, onNewClient)) {
+  if (tcpPort_open(&port, "9000", 1, onNewClient)) {
     return -1;
   }
 
@@ -46,12 +46,10 @@ int main() {
 
   tcpPort_close(&port);
 
-  ioevent_close();
-
   return 0;
 }
 
-static void onNewClient(void *objListener, int fd) {
+static void onNewClient(TcpPort *port, int fd) {
   printf("TRACE - onNewClient()\n");
 
   int initRes =

@@ -82,8 +82,6 @@ void httpAssets_getFile(HttpClient *client) {
   const char *uriPath = http_reqArg(client, 0);
 
   if (uriPath == NULL || *uriPath == '\0') {
-    log_info("http-assets",
-             "Arquivo não especificado. Buscando pelo /index.html.\n");
     uriPath = "index.html";
   }
 

@@ -41,7 +41,7 @@ int tcpPort_open(TcpPort *port, const char *num, size_t maxClients,
     return -1;
   }
 
-  if (ioevent_install(port->fd)) {
+  if (ioevent_install(port->fd, true)) {
     return -1;
   }
 

@@ -203,7 +203,7 @@ int http_open(const char *port, size_t maxClients) {
     return -1;
   }
 
-  if (ioevent_init(true)) {
+  if (ioevent_open()) {
     return -1;
   }
 
@@ -220,11 +220,6 @@ int http_open(const char *port, size_t maxClients) {
 
   if (http_close(server)) {
     log_erro("http", "Erro em closeServer().\n");
-    r = -1;
-  }
-
-  if (ioevent_close()) {
-    log_erro("http", "Erro em ioevent_close().\n");
     r = -1;
   }
 

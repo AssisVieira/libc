@@ -56,8 +56,6 @@ void db_open(void *context, onDBCallback onConnected, onDBCallback onError) {
 
   db.conn = PQconnectStart(strConn);
 
-  // PQtrace(db.conn, db.log);
-
   if (db.conn == NULL) {
     log_erro("db", "PQconnectStart()\n");
     onError(&db);
