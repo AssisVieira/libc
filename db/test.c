@@ -14,14 +14,7 @@ typedef struct People {
   char email[128];
 } People;
 
-// export DB_STRING_CONNECTION="host=127.0.0.1 port=5433 user=assis
-// password=assis dbname=assis sslmode=require"
-
 static int total = 0;
-static bool finish = false;
-static char *SQL_SELECT = "select id, name, email from people";
-static char *SQL_INSERT =
-    "insert into people (name, email) values ($1::text, $2::text)";
 
 int main() {
   ioevent_open();
@@ -34,16 +27,12 @@ int main() {
 
   db_open(people, insertPeople, onConnectionError);
 
-  ioevent_run(&finish);
-
-  ioevent_close();
-
-  return 0;
+  return ioevent_run();
 }
 
 static void insertPeople(DB *db) {
   People *people = db_context(db);
-  db_sql(db, SQL_INSERT);
+  db_sql(db, "insert into people (name, email) values ($1::text, $2::text)");
   db_param(db, people->name);
   db_param(db, people->email);
   db_send(db, selectPeople, onSqlError);
@@ -56,7 +45,9 @@ static void selectPeople(DB *db) {
     return;
   }
 
-  db_sql(db, SQL_SELECT);
+  total = 0;
+
+  db_sql(db, "select id, name, email from people");
   db_send(db, onPeopleSelected, onSqlError);
 }
 
@@ -69,27 +60,27 @@ static void onPeopleSelected(DB *db) {
     printf("%s\t\t%s\t\t%s\n", id, name, email);
   }
 
-  if (total++ < 3000) {
-    db_sql(db, SQL_SELECT);
+  if (total++ < 5) {
+    db_sql(db, "select id, name, email from people");
     db_send(db, onPeopleSelected, onSqlError);
     return;
   }
 
   free(db_context(db));
   db_close(db);
-  finish = true;
+  ioevent_close(0);
 }
 
 static void onConnectionError(DB *db) {
   printf("onConnectionError()\n");
   free(db_context(db));
   db_close(db);
-  finish = true;
+  ioevent_close(-1);
 }
 
 static void onSqlError(DB *db) {
   printf("onSqlError()\n");
   free(db_context(db));
   db_close(db);
-  finish = true;
+  ioevent_close(-1);
 }

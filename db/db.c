@@ -46,7 +46,10 @@ void db_open(void *context, onDBCallback onConnected, onDBCallback onError) {
   char *strConn = getenv("DB_STRING_CONNECTION");
 
   if (strConn == NULL || strlen(strConn) == 0) {
-    log_erro("db", "Variável de ambiente não definida: DB_STRING_CONNECTION\n");
+    log_erro("db",
+             "Variável de ambiente não definida: DB_STRING_CONNECTION. "
+             "Exemplo: export DB_STRING_CONNECTION=\"host=127.0.0.1 port=5433 "
+             "user=assis password=assis dbname=assis sslmode=require\"\n");
     onError(&db);
     return;
   }
@@ -62,7 +65,7 @@ void db_open(void *context, onDBCallback onConnected, onDBCallback onError) {
   }
 
   if (PQstatus(db.conn) == CONNECTION_BAD) {
-    log_erro("db", "PQstatus()\n");
+    log_erro("db", "PQstatus() = %d\n", PQstatus(db.conn));
     onError(&db);
     return;
   }
@@ -87,7 +90,16 @@ void db_open(void *context, onDBCallback onConnected, onDBCallback onError) {
 
   if (ioevent_listen(PQsocket(db.conn), IOEVENT_TYPE_WRITE, &db,
                      db_onConnect)) {
-    log_erro("db", "ioevent_listen(); fd = %d\n", PQsocket(db.conn));
+    log_erro("db", "ioevent_listen(IOEVENT_TYPE_WRITE); fd = %d\n",
+             PQsocket(db.conn));
+    onError(&db);
+    return;
+  }
+
+  if (ioevent_listen(PQsocket(db.conn), IOEVENT_TYPE_ERROR, &db,
+                     db_onSocketError)) {
+    log_erro("db", "ioevent_listen(IOEVENT_TYPE_ERROR); fd = %d\n",
+             PQsocket(db.conn));
     onError(&db);
     return;
   }
@@ -169,9 +181,7 @@ static void db_onQueryResult(void *context, int fd, IOEventType event) {
   (void)event;
   bool hasError = false;
 
-  int r = PQconsumeInput(db->conn);
-
-  if (!r) {
+  if (!PQconsumeInput(db->conn)) {
     log_erro("db", "%s\n", PQerrorMessage(db->conn));
     // Se houve problema com PQconsumeInput(), mas ainda está ocupado
     // (PQisBusy), então acreditamos que o problema é passageiro e que os
@@ -223,27 +233,57 @@ static void db_onConnect(void *context, int fd, IOEventType event) {
 
   if (polling == PGRES_POLLING_READING) {
     log_dbug("db", "PQconnectPoll() : PGRES_POLLING_READING\n");
-    ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_READ, db, db_onConnect);
-    ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_WRITE);
+
+    if (ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_READ, db,
+                       db_onConnect)) {
+      db->onDBError(db);
+      return;
+    }
+
+    if (ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_WRITE)) {
+      db->onDBError(db);
+      return;
+    }
+
     return;
   }
 
   if (polling == PGRES_POLLING_WRITING) {
     log_dbug("db", "PQconnectPoll() : PGRES_POLLING_WRITING\n");
-    ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_WRITE, db, db_onConnect);
-    ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_READ);
+
+    if (ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_WRITE, db,
+                       db_onConnect)) {
+      db->onDBError(db);
+      return;
+    }
+
+    if (ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_READ)) {
+      db->onDBError(db);
+      return;
+    }
+
     return;
   }
 
   if (polling == PGRES_POLLING_OK) {
     log_dbug("db", "PQconnectPoll() : PGRES_POLLING_OK\n");
     log_dbug("db", "PQstatus() : %d\n", PQstatus(db->conn));
-    ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_READ);
-    ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_WRITE);
 
-    ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_READ, db, db_onQueryResult);
-    ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_ERROR, db,
-                   db_onSocketError);
+    if (ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_READ)) {
+      db->onDBError(db);
+      return;
+    }
+
+    if (ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_WRITE)) {
+      db->onDBError(db);
+      return;
+    }
+
+    if (ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_READ, db,
+                       db_onQueryResult)) {
+      db->onDBError(db);
+      return;
+    }
 
     if (PQsetnonblocking(db->conn, 1 /*NON-BLOCKING*/) == 0) {
       db->onDBConnected(db);

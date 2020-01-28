@@ -37,6 +37,8 @@ typedef struct IOEvent {
   int epoll;
   // Vetor de Fdes, em que os índices são descritores.
   Vetor fds;
+  bool close;
+  int closeResult;
 } IOEvent;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -47,7 +49,10 @@ static void NULL_LISTENER(void *context, int fd, IOEventType eventType);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static thread_local IOEvent ioevent;
+static thread_local IOEvent ioevent = {
+    .epoll = -1,
+    .close = true,
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -70,52 +75,48 @@ int ioevent_open() {
   if (vetor_init(&ioevent.fds, 10) != 0) {
     log_erro("ioevent", "Erro na criação do ioevent.\n");
     close(ioevent.epoll);
+    ioevent.epoll = -1;
     return -1;
   }
+
+  ioevent.close = false;
 
   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ioevent_close() {
+int ioevent_close(int result) {
   log_dbug("ioevent", "Fechando ioevent...\n");
-
-  if (close(ioevent.epoll) == -1) {
-    log_erro("ioevent", "Erro em close(): %d - %s.\n", errno, strerror(errno));
-    return -1;
-  }
-
-  for (int i = 0; i < vetor_qtd(&ioevent.fds); i++) {
-    free(vetor_item(&ioevent.fds, i));
-  }
-
-  vetor_destruir(&ioevent.fds);
-
+  ioevent.close = true;
+  ioevent.closeResult = result;
+  // TODO: Talvez seja necessário enviar uma notificação pro loop sair da
+  // espera, detectar a mudança de estado do ioevent e assim encerrar a execução
+  // do ioevent.
   return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int ioevent_run(bool *finish) {
-  const int MAXEVENTS = 64;
+int ioevent_run() {
   const int INFINITE_TIME = -1;
-  struct epoll_event eventTypes[MAXEVENTS];
+  struct epoll_event eventTypes[IOEVENT_EVENTS_MAX];
 
   log_dbug("ioevent", "Iniciando laço de eventTypes...\n");
 
-  while (*finish == false) {
-    log_dbug("ioevent", "Aguardando eventTypes...\n");
+  while (!ioevent.close) {
+    log_dbug("ioevent", "Aguardando eventos...\n");
 
-    int numFds =
-        epoll_wait(ioevent.epoll, eventTypes, MAXEVENTS, INFINITE_TIME);
+    int numFds = epoll_wait(ioevent.epoll, eventTypes, IOEVENT_EVENTS_MAX,
+                            INFINITE_TIME);
 
     log_dbug("ioevent", "File descriptors prontos: %d.\n", numFds);
 
     if (numFds == -1 && errno != EINTR) {
       log_erro("ioevent", "Erro em epoll_wait(): %d - %s.\n", errno,
                strerror(errno));
-      return -1;
+      ioevent_close(-1);
+      continue;
     }
 
     for (int i = 0; i < numFds; i++) {
@@ -123,33 +124,45 @@ int ioevent_run(bool *finish) {
       IOEventFd *ioeventFd = vetor_item(&ioevent.fds, (size_t)fd);
 
       if (eventTypes[i].events & EPOLLIN) {
-        log_dbug("ioevent", "Conexão %d -> leitura.\n", fd);
+        log_dbug("ioevent", "FD %d - READ.\n", fd);
         IOEventListener *listener = &ioeventFd->listeners[IOEVENT_TYPE_READ];
         listener->func(listener->context, fd, IOEVENT_TYPE_READ);
       }
 
       if (eventTypes[i].events & EPOLLOUT) {
-        log_dbug("ioevent", "Conexão %d -> escrita.\n", fd);
+        log_dbug("ioevent", "FD %d - WRITE.\n", fd);
         IOEventListener *listener = &ioeventFd->listeners[IOEVENT_TYPE_WRITE];
         listener->func(listener->context, fd, IOEVENT_TYPE_WRITE);
       }
 
       if (eventTypes[i].events & EPOLLHUP) {
-        log_dbug("ioevent", "Conexão %d -> desconectado.\n", fd);
+        log_dbug("ioevent", "FD %d - HUP.\n", fd);
         IOEventListener *listener =
             &ioeventFd->listeners[IOEVENT_TYPE_DISCONNECTED];
         listener->func(listener->context, fd, IOEVENT_TYPE_DISCONNECTED);
       }
 
       if (eventTypes[i].events & EPOLLERR) {
-        log_dbug("ioevent", "Conexão %d -> erro.\n", fd);
+        log_dbug("ioevent", "FD %d - ERROR.\n", fd);
         IOEventListener *listener = &ioeventFd->listeners[IOEVENT_TYPE_ERROR];
         listener->func(listener->context, fd, IOEVENT_TYPE_ERROR);
       }
     }
   }
 
-  return 0;
+  if (close(ioevent.epoll) == -1) {
+    log_erro("ioevent", "Erro em close(): %d - %s.\n", errno, strerror(errno));
+  }
+
+  ioevent.epoll = -1;
+
+  for (int i = 0; i < vetor_qtd(&ioevent.fds); i++) {
+    free(vetor_item(&ioevent.fds, i));
+  }
+
+  vetor_destruir(&ioevent.fds);
+
+  return ioevent.closeResult;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -22,6 +22,8 @@
 #include <stdint.h>
 #include <sys/epoll.h>
 
+#define IOEVENT_EVENTS_MAX 64
+
 typedef enum IOEventType {
   IOEVENT_TYPE_READ = 0,
   IOEVENT_TYPE_WRITE,
@@ -42,8 +44,8 @@ int ioevent_listen(int fd, IOEventType eventType, void *context,
 
 int ioevent_nolisten(int fd, IOEventType eventType);
 
-int ioevent_run(bool *finish);
+int ioevent_run();
 
-int ioevent_close();
+int ioevent_close(int result);
 
 #endif
