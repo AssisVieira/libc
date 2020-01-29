@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "tcp.h"
 
 // Para usar o accept4 é preciso definir esta macro.
@@ -114,7 +114,7 @@ TcpStatus tcp_write(int fd, BuffReader *reader) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int tcp_listen(const char *port, int backlog) {
-  int sockOuvinte;
+  int sockOuvinte = -1;
   struct addrinfo hints, *listaAddr, *addrPtr;
 
   memset(&hints, 0, sizeof(struct addrinfo));

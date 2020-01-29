@@ -1,1 +1,3 @@
-build --copt="-Wall"
+build --copt='-Wall'
+build --copt='-Werror'
+build --copt='-std=c99'

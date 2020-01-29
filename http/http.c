@@ -85,7 +85,7 @@ typedef int (*HttpClientStateFn)(HttpClient *client, char c);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef struct HttpClient {
+struct HttpClient {
   HttpClientStateFn state;
   HttpReq req;
   char args[ARGS_MAX][ARG_MAX];
@@ -94,7 +94,7 @@ typedef struct HttpClient {
   TcpInbox inbox;
   TcpOutbox outbox;
   bool acceptRequest;
-} HttpClient;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -359,7 +359,7 @@ static int http_dispatch(HttpClient *client) {
   for (int i = 0; i < server.handlersLen; i++) {
     HttpHandler *handler = &server.handlers[i];
 
-    if (strcasecmp(handler->method, http_reqMethod(client)) == 0 &&
+    if (strcmp(handler->method, http_reqMethod(client)) == 0 &&
         regexec(&handler->pattern, http_reqPath(client), ARGS_MAX, args, 0) ==
             0) {
 

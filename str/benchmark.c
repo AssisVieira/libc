@@ -53,7 +53,7 @@ static void testStrCaseCmp() {
     const char *s22 = str_cstr(s2);
     clock_t begin1 = clock();
     for (int i = 0; i < ntests; i++) {
-      assert(strcasecmp(s11, s22) == 0);
+      assert(strcmp(s11, s22) == 0);
     }
     clock_t end1 = clock();
     double timeElapsed1 = ((double)(end1 - begin1) / CLOCKS_PER_SEC) * 1000;

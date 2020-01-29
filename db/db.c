@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "db.h"
 #include "log/log.h"
 #include <postgresql/libpq-fe.h>
@@ -29,7 +29,7 @@ static void db_onSocketError(void *context, int fd, IOEventType event);
 #define PG_FORMAT_TEXT 0
 #define PG_FORMAT_BIN 1
 
-typedef struct DB {
+struct DB {
   PGconn *conn;
   onDBCallback onDBConnected;
   onDBCallback onDBError;
@@ -40,7 +40,7 @@ typedef struct DB {
   const char *params[DB_SQL_PARAMS_MAX];
   size_t paramsLen;
   PGresult *result;
-} DB;
+};
 
 DB db = {
     .conn = NULL,

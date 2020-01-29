@@ -42,7 +42,7 @@ static HttpMimeType mimeTypeByFilename(const char *filename);
 
 int httpAssets_init(const char *dir) {
   assets.dirPublico[0] = 0;
-  strncat(assets.dirPublico, dir, sizeof(assets.dirPublico));
+  strncat(assets.dirPublico, dir, sizeof(assets.dirPublico)-1);
   log_info("http-assets", "Inicializando...diretório público: %s.\n",
            assets.dirPublico);
   return 0;
@@ -142,19 +142,19 @@ static HttpMimeType mimeTypeByFilename(const char *filename) {
   if (extensao == NULL)
     return HTTP_TYPE_TEXT;
 
-  if (strcasecmp(extensao, ".html") == 0)
+  if (strcmp(extensao, ".html") == 0 || strcmp(extensao, ".HTML") == 0)
     return HTTP_TYPE_HTML;
 
-  if (strcasecmp(extensao, ".js") == 0)
+  if (strcmp(extensao, ".js") == 0 || strcmp(extensao, ".JS") == 0)
     return HTTP_TYPE_JS;
 
-  if (strcasecmp(extensao, ".css") == 0)
+  if (strcmp(extensao, ".css") == 0 || strcmp(extensao, ".CSS") == 0)
     return HTTP_TYPE_CSS;
 
-  if (strcasecmp(extensao, ".jpg") == 0)
+  if (strcmp(extensao, ".jpg") == 0 || strcmp(extensao, ".JPG") == 0)
     return HTTP_TYPE_JPEG;
 
-  if (strcasecmp(extensao, ".png") == 0)
+  if (strcmp(extensao, ".png") == 0 || strcmp(extensao, ".PNG") == 0)
     return HTTP_TYPE_PNG;
 
   return HTTP_TYPE_TEXT;
