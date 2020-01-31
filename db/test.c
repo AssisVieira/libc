@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "db.h"
 #include "log/log.h"
 #include <stdio.h>
@@ -22,8 +22,6 @@
 static void insertPeople(DB *db);
 static void selectPeople(DB *db);
 static void onPeopleSelected(DB *db);
-static void onSqlError(DB *db);
-static void onConnectionError(DB *db);
 
 typedef struct People {
   char name[32];
@@ -35,26 +33,39 @@ static int total = 0;
 int main() {
   ioevent_open();
 
-  log_ignore("ioevent", LOG_DBUG);
+  // log_ignore("ioevent", LOG_DBUG);
 
-  People *people = malloc(sizeof(People));
-  strcpy(people->name, "John");
-  strcpy(people->email, "john@john.com");
+  if (db_openPool(5, 10)) {
+    perror("Falha ao abrir o pool.\n");
+    return -1;
+  }
 
-  db_open(people, insertPeople, onConnectionError);
+  DB *db = db_open();
+
+  if (db == NULL) {
+    perror("Erro ao obter conexão.\n");
+    return -1;
+  }
+
+  insertPeople(db);
 
   return ioevent_run();
 }
 
 static void insertPeople(DB *db) {
-  People *people = db_context(db);
   db_sql(db, "insert into people (name, email) values ($1::text, $2::text)");
-  db_param(db, people->name);
-  db_param(db, people->email);
-  db_send(db, selectPeople, onSqlError);
+  db_param(db, "John");
+  db_param(db, "john@john.com");
+  db_send(db, NULL, selectPeople);
 }
 
 static void selectPeople(DB *db) {
+
+  if (db_error(db)) {
+    perror("Erro ao inserir.\n");
+    db_close(db);
+    return;
+  }
 
   if (total++ < 3000) {
     insertPeople(db);
@@ -64,11 +75,12 @@ static void selectPeople(DB *db) {
   total = 0;
 
   db_sql(db, "select id, name, email from people");
-  db_send(db, onPeopleSelected, onSqlError);
+  db_send(db, NULL, onPeopleSelected);
 }
 
 static void onPeopleSelected(DB *db) {
   printf("onPeopleSelected()\n");
+
   for (int i = 0; i < db_count(db); i++) {
     const char *id = db_value(db, i, 0);
     const char *name = db_value(db, i, 1);
@@ -78,25 +90,10 @@ static void onPeopleSelected(DB *db) {
 
   if (total++ < 5) {
     db_sql(db, "select id, name, email from people");
-    db_send(db, onPeopleSelected, onSqlError);
+    db_send(db, NULL, onPeopleSelected);
     return;
   }
 
-  free(db_context(db));
   db_close(db);
   ioevent_close(0);
-}
-
-static void onConnectionError(DB *db) {
-  printf("onConnectionError()\n");
-  free(db_context(db));
-  db_close(db);
-  ioevent_close(-1);
-}
-
-static void onSqlError(DB *db) {
-  printf("onSqlError()\n");
-  free(db_context(db));
-  db_close(db);
-  ioevent_close(-1);
 }
