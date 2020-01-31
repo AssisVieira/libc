@@ -170,7 +170,8 @@ int ioevent_run() {
 int ioevent_install(int fd, bool edgeTriggered) {
   IOEventFd *desc = vetor_item(&ioevent.fds, (size_t)fd);
 
-  log_dbug("ioevent", "Instalando conexão %d.\n", fd);
+  log_dbug("ioevent", "Instalando conexão %d%s.\n", fd,
+           (edgeTriggered) ? " (Edge Triggered)" : "");
 
   if (desc == NULL) {
     desc = malloc(sizeof(IOEventFd));
@@ -188,8 +189,6 @@ int ioevent_install(int fd, bool edgeTriggered) {
   if (edgeTriggered) {
     desc->epollEvent.events |= EPOLLET;
   }
-
-  log_dbug("ioevent", "Instalando a conexão %d.\n", fd);
 
   if (epoll_ctl(ioevent.epoll, EPOLL_CTL_ADD, fd, &desc->epollEvent) != 0) {
     log_erro("ioevent", "Erro em epoll_ctl(): %d - %s.\n", errno,
