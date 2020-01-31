@@ -14,21 +14,38 @@
  *   limitations under the License.
  ******************************************************************************/
 
+#include "db/db.h"
 #include "http/assets.h"
 #include "http/http.h"
 #include "httpPeople.h"
 #include "log/log.h"
 #include <stdbool.h>
+#include <stdio.h>
 
 int main() {
-  log_ignore("tcp", LOG_INFO);
-  log_ignore("tcp-inbox", LOG_INFO);
-  log_ignore("tcp-outbox", LOG_INFO);
-  log_ignore("tcp-port", LOG_INFO);
-  log_ignore("ioevent", LOG_INFO);
-  log_ignore("http", LOG_TRAC);
+  int r = 0;
+
+  // log_ignore("tcp", LOG_INFO);
+  // log_ignore("tcp-inbox", LOG_INFO);
+  // // log_ignore("tcp-outbox", LOG_INFO);
+  // log_ignore("tcp-port", LOG_INFO);
+  // log_ignore("ioevent", LOG_INFO);
+  log_ignore("http", LOG_INFO);
+  // log_ignore("db", LOG_INFO);
+
+  // Startup...
+
+  if (ioevent_open()) {
+    return -1;
+  }
+
+  if (db_openPool(50, 50)) {
+    perror("db_openPool()\n");
+    return -1;
+  }
 
   if (httpAssets_init("http/exemplo/web")) {
+    perror("httpAssets_init()\n");
     return -1;
   }
 
@@ -36,5 +53,26 @@ int main() {
 
   http_handler("GET", "/people/search$", httpPeople_search);
 
-  return http_open("2000", 25);
+  if (http_open("2000", 100)) {
+    log_erro("http", "http_open().\n");
+    return -1;
+  }
+
+  // Execution...
+
+  if (ioevent_run()) {
+    log_erro("http", "ioevent_run().\n");
+    r = -1;
+  }
+
+  // Shutdown...
+
+  if (http_close()) {
+    log_erro("http", "http_close().\n");
+    r = -1;
+  }
+
+  db_closePool();
+
+  return r;
 }

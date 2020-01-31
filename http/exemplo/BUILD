@@ -18,7 +18,7 @@ cc_binary(
     name = "exemplo",
     srcs = glob(["*.c", "*.h"]),
     linkstatic = True,
-    deps = ["//http"],
+    deps = ["//http", "//db"],
     visibility = ["//visibility:public"],
     data = ["web"]
 )

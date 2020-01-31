@@ -13,19 +13,50 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #include "people.h"
+#include "db/db.h"
+#include "log/log.h"
+#include <string.h>
 
-int people_search(const char *query, int page, int pageSize,
-                  onPeopleSearchResult callback, void *ctx) {
+static void onPeopleSearchResp(DB *db);
 
-  People people[] = {
-      {"Fulano", 33},
-      {"Beltrano", 31},
-      {"Cicrano", 29},
-  };
+void people_search(PeopleSearchSig *sig) {
+  if (strlen(sig->query) == 0) {
+    return sig->callback(sig, PEOPLE_QUERY_EMPTY);
+  }
 
-  callback(ctx, people, sizeof(people) / sizeof(People));
+  if (sig->page < 0) {
+    sig->page = 0;
+  }
 
-  return 0;
+  if (sig->pageSize < 10) {
+    sig->pageSize = 10;
+  }
+
+  db_sql(sig->db, "select id, name, email from people where name ilike '%' || "
+                  "$1::text || '%' "
+                  "OR email ilike '%' || $1::text || '%'");
+
+  db_param(sig->db, sig->query);
+
+  db_send(sig->db, sig, onPeopleSearchResp);
+}
+
+static void onPeopleSearchResp(DB *db) {
+  PeopleSearchSig *sig = db_context(db);
+
+  if (db_error(db)) {
+    return sig->callback(sig, PEOPLE_ERROR);
+  }
+
+  sig->resp.peopleLen = db_count(db);
+
+  for (int i = 0; i < db_count(db); i++) {
+    strcpy(sig->resp.peoples[i].id, db_value(db, i, 0));
+    strcpy(sig->resp.peoples[i].name, db_value(db, i, 1));
+    strcpy(sig->resp.peoples[i].email, db_value(db, i, 2));
+  }
+
+  return sig->callback(sig, PEOPLE_OK);
 }

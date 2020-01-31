@@ -17,16 +17,40 @@
 #ifndef PEOPLE_H
 #define PEOPLE_H
 
+#include "db/db.h"
 #include <stddef.h>
 
+#define PEOPLE_SEARCH_MAX_PEOPLES 25
+
 typedef struct People {
-  char *name;
-  int old;
+  char name[128];
+  char email[128];
+  char id[32];
 } People;
 
-typedef void (*onPeopleSearchResult)(void *ctx, People *list, size_t len);
+typedef enum PeopleStatus {
+  PEOPLE_OK = 0,
+  PEOPLE_QUERY_EMPTY,
+  PEOPLE_ERROR,
+} PeopleStatus;
 
-int people_search(const char *query, int page, int pageSize,
-                  onPeopleSearchResult callback, void *ctx);
+typedef struct PeopleSearchSig PeopleSearchSig;
+
+typedef void (*PeopleSearchCb)(PeopleSearchSig *sig, PeopleStatus status);
+
+struct PeopleSearchSig {
+  const char *query;
+  int page;
+  int pageSize;
+  DB *db;
+  PeopleSearchCb callback;
+  void *ctx;
+  struct {
+    int peopleLen;
+    People peoples[PEOPLE_SEARCH_MAX_PEOPLES];
+  } resp;
+};
+
+void people_search(PeopleSearchSig *sig);
 
 #endif

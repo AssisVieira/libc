@@ -13,36 +13,48 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
-#include "httpPeople.h"
-#include "people.h"
 
-static void onSearchResult(void *context, People peoples[], size_t len);
+#include "httpPeople.h"
+#include "db/db.h"
+#include "people.h"
+#include <stdlib.h>
+
+static void onPeopleSearchResp(PeopleSearchSig *sig, PeopleStatus status);
 
 void httpPeople_searchView(HttpClient *client) {
   http_respOk(client, HTTP_TYPE_HTML, "search view");
 }
 
 void httpPeople_search(HttpClient *client) {
-  const char *query = "term";
-  int page = 25;
-  int pageSize = 10;
+  PeopleSearchSig *sig = malloc(sizeof(PeopleSearchSig));
+  sig->query = http_reqParam(client, "q");
+  sig->page = 0;
+  sig->pageSize = 10;
+  sig->callback = onPeopleSearchResp;
+  sig->ctx = client;
+  sig->db = db_open();
 
-  if (people_search(query, page, pageSize, onSearchResult, client)) {
-    return;
-  }
+  people_search(sig);
 }
 
-static void onSearchResult(void *context, People peoples[], size_t len) {
-  HttpClient *client = context;
+static void onPeopleSearchResp(PeopleSearchSig *sig, PeopleStatus status) {
+  HttpClient *client = sig->ctx;
+
+  if (status != PEOPLE_OK) {
+    db_close(sig->db);
+    free(sig);
+    return http_respError(client);
+  }
 
   http_respBegin(client, 200, HTTP_TYPE_HTML);
-
   http_respBody(client, "Buscando por: %s<br>\n", http_reqParam(client, "q"));
 
-  for (int i = 0; i < len; i++) {
-    http_respBody(client, "%s<br>\n", peoples[i].name);
+  for (int i = 0; i < sig->resp.peopleLen; i++) {
+    http_respBody(client, "%s<br>\n", sig->resp.peoples[i].name);
   }
 
   http_respEnd(client);
+
+  db_close(sig->db);
+  free(sig);
 }
