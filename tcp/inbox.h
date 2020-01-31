@@ -31,14 +31,14 @@ typedef enum TcpInboxEvent {
 typedef void (*TcpInboxOnData)(void *ctx, TcpInbox *inbox);
 typedef void (*TcpInboxOnError)(void *ctx, TcpInbox *inbox);
 
-typedef struct TcpInbox {
+struct TcpInbox {
   int fd;
   Buff buff;
   bool pendingData;
   void *ctx;
   TcpInboxOnData onData;
   TcpInboxOnError onError;
-} TcpInbox;
+};
 
 /**
  * Inicializa a caixa de entrada tcp.

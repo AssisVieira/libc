@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #ifndef TCP_OUTBOX_H
 #define TCP_OUTBOX_H
 
@@ -26,7 +26,7 @@ typedef struct TcpOutbox TcpOutbox;
 typedef void (*TcpOutboxOnError)(void *ctx, TcpOutbox *outbox);
 typedef void (*TcpOutboxOnFlushed)(void *ctx, TcpOutbox *outbox);
 
-typedef struct TcpOutbox {
+struct TcpOutbox {
   int fd;
   Buff buff;
   bool canFlush;
@@ -34,7 +34,7 @@ typedef struct TcpOutbox {
   void *ctx;
   TcpOutboxOnError onError;
   TcpOutboxOnFlushed onFlushed;
-} TcpOutbox;
+};
 
 int tcpOutbox_init(TcpOutbox *outbox, int fd, size_t size, void *ctx,
                    TcpOutboxOnError onError, TcpOutboxOnFlushed onFlushed);
@@ -44,5 +44,7 @@ int tcpOutbox_close(TcpOutbox *outbox);
 void tcpOutbox_flush(TcpOutbox *outbox);
 
 BuffWriter *tcpOutbox_writer(TcpOutbox *outbox);
+
+void tcpOutbox_nodelay(TcpOutbox *outbox);
 
 #endif

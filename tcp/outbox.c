@@ -15,6 +15,7 @@
  ******************************************************************************/
 
 #include "outbox.h"
+#include "log/log.h"
 #include "tcp.h"
 #include <sys/socket.h>
 
@@ -60,6 +61,8 @@ int tcpOutbox_close(TcpOutbox *outbox) {
 void tcpOutbox_flush(TcpOutbox *outbox) {
   if (outbox->canFlush) {
     flush(outbox);
+  } else {
+    log_dbug("tcp-outbox", "(fd %d) TCP_TRY_AGAIN\n", outbox->fd);
   }
 }
 
@@ -82,6 +85,9 @@ static void onReady(void *obj, int fd, IOEventType event) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void flush(TcpOutbox *outbox) {
+  log_dbug("tcp-outbox", "(fd %d) flush(outbox: %d bytes)\n", outbox->fd,
+           buff_used(&outbox->buff));
+
   TcpStatus status = tcp_write(outbox->fd, buff_reader(&outbox->buff));
 
   if (status == TCP_OK) {
@@ -90,6 +96,8 @@ static void flush(TcpOutbox *outbox) {
 
   if (status == TCP_TRY_AGAIN) {
     outbox->canFlush = false;
+
+    log_dbug("tcp-outbox", "(fd %d) TCP_TRY_AGAIN\n", outbox->fd);
 
     if (!outbox->ioeventInstalled) {
       int r = ioevent_listen(outbox->fd, IOEVENT_TYPE_WRITE, outbox, onReady);
@@ -108,3 +116,7 @@ static void flush(TcpOutbox *outbox) {
     return;
   }
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+void tcpOutbox_nodelay(TcpOutbox *outbox) {}

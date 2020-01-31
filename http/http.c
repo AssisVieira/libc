@@ -126,7 +126,6 @@ static thread_local HttpServer server = {
 
 static void http_onConnected(TcpPort *port, int conexao);
 static void http_onRequest(HttpClient *client);
-static int http_close();
 static int http_dispatch(HttpClient *client);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -177,7 +176,7 @@ static void http_sendRequest(HttpClient *client);
 
 static const char *http_strMimeType(HttpMimeType contentType);
 static const char *http_strStatus(HttpStatus status);
-static int http_respHeaderEnd(HttpClient *client);
+static void http_respHeaderEnd(HttpClient *client);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -191,7 +190,6 @@ static size_t http_min(size_t a, size_t b);
 
 int http_open(const char *port, size_t maxClients) {
   int r = 0;
-  bool finish = false;
 
   log_info("http", "Inicializando...\n");
   log_info("http", "Concorrência máxima: %d\n", maxClients);
@@ -203,25 +201,11 @@ int http_open(const char *port, size_t maxClients) {
     return -1;
   }
 
-  if (ioevent_open()) {
-    return -1;
-  }
-
   if (tcpPort_open(&server.port, port, maxClients, http_onConnected)) {
     return -1;
   }
 
   log_info("http", "Aguardando conexões na porta: %s.\n", port);
-
-  if (ioevent_run(&finish)) {
-    log_erro("http", "Erro em ioevent_run().\n");
-    r = -1;
-  }
-
-  if (http_close(server)) {
-    log_erro("http", "Erro em closeServer().\n");
-    r = -1;
-  }
 
   return r;
 }
@@ -247,7 +231,7 @@ int http_handler(const char *method, const char *path, HttpHandlerFunc func) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static int http_close() {
+int http_close() {
   int r = 0;
 
   log_dbug("http", "Encerrando servidor...\n");
@@ -341,7 +325,7 @@ static void http_onRequest(HttpClient *client) {
 
   if (http_dispatch(client)) {
     log_dbug("http", "Recurso não encontrado: %s.\n", http_reqPath(client));
-    http_respNotFound(client, HTTP_TYPE_HTML, "Recurso não encontrado");
+    http_respNotFound(client);
     return;
   }
 }
@@ -1005,27 +989,32 @@ static int stateNovaLinha3(HttpClient *client, char c) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_respNotFound(HttpClient *client, HttpMimeType mimeType,
-                      const char *str) {
-  http_respBegin(client, HTTP_STATUS_NOT_FOUND, mimeType);
-  http_respBody(client, str);
+void http_respNotFound(HttpClient *client) {
+  http_respBegin(client, HTTP_STATUS_NOT_FOUND, HTTP_TYPE_HTML);
+  http_respBody(client, "Recurso não encontrado.");
   http_respEnd(client);
-  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_respOk(HttpClient *client, HttpMimeType mimeType, const char *str) {
+void http_respError(HttpClient *client) {
+  http_respBegin(client, HTTP_STATUS_INTERNAL_ERROR, HTTP_TYPE_HTML);
+  http_respBody(client, "Erro desconhecido.");
+  http_respEnd(client);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void http_respOk(HttpClient *client, HttpMimeType mimeType, const char *str) {
   http_respBegin(client, HTTP_STATUS_OK, mimeType);
   http_respBody(client, str);
   http_respEnd(client);
-  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_respBegin(HttpClient *client, HttpStatus status,
-                   HttpMimeType mimeType) {
+void http_respBegin(HttpClient *client, HttpStatus status,
+                    HttpMimeType mimeType) {
   log_dbug("http", "<<< HTTP/1.1 %d %s\\r\\n\n", status,
            http_strStatus(status));
   BuffWriter *writer = tcpOutbox_writer(&client->outbox);
@@ -1043,50 +1032,49 @@ int http_respBegin(HttpClient *client, HttpStatus status,
     buff_writer_write(writer, "HTTP/1.1 400 OK\r\n",
                       strlen("HTTP/1.1 400 OK\r\n"));
     break;
+  case HTTP_STATUS_INTERNAL_ERROR:
+    buff_writer_write(writer, "HTTP/1.1 500 OK\r\n",
+                      strlen("HTTP/1.1 500 OK\r\n"));
+    break;
   }
 
   http_respHeader(client, "Content-Type", http_strMimeType(mimeType));
   http_respHeader(client, "Transfer-Encoding", "chunked");
-
-  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_respHeader(HttpClient *client, const char *nome, const char *valor) {
+void http_respHeader(HttpClient *client, const char *nome, const char *valor) {
   log_dbug("http", "<<< %s: %s\\r\\n\n", nome, valor);
   BuffWriter *writer = tcpOutbox_writer(&client->outbox);
   buff_writer_write(writer, nome, strlen(nome));
   buff_writer_write(writer, ": ", 2);
   buff_writer_write(writer, valor, strlen(valor));
   buff_writer_write(writer, "\r\n", 2);
-  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_respHeaderInt(HttpClient *client, const char *nome, int valor) {
+void http_respHeaderInt(HttpClient *client, const char *nome, int valor) {
   log_dbug("http", "<<< %s: %s\\r\\n\n", nome, valor);
   BuffWriter *writer = tcpOutbox_writer(&client->outbox);
   buff_writer_write(writer, nome, strlen(nome));
   buff_writer_write(writer, ": ", 2);
   buff_writer_printf(writer, "%d", valor);
   buff_writer_write(writer, "\r\n", 2);
-  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static int http_respHeaderEnd(HttpClient *client) {
+static void http_respHeaderEnd(HttpClient *client) {
   log_dbug("http", "<<< \\r\\n\n");
   BuffWriter *writer = tcpOutbox_writer(&client->outbox);
   buff_writer_write(writer, "\r\n", 2);
-  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_respBody(HttpClient *client, const char *fmt, ...) {
+void http_respBody(HttpClient *client, const char *fmt, ...) {
   BuffWriter *writer = tcpOutbox_writer(&client->outbox);
   va_list vargs;
   va_start(vargs, fmt);
@@ -1095,7 +1083,7 @@ int http_respBody(HttpClient *client, const char *fmt, ...) {
   int buffLen = vsnprintf(buff, sizeof(buff), fmt, vargs);
 
   if (buffLen > sizeof(buff)) {
-    return -1;
+    return;
   }
 
   if (!client->respHeaderDone) {
@@ -1111,13 +1099,11 @@ int http_respBody(HttpClient *client, const char *fmt, ...) {
 
   log_dbug("http", "<<< %d\\r\\n\n", buffLen);
   log_dbug("http", "<<< %s\\r\\n\n", buff);
-
-  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_respBodyLen(HttpClient *client, const char *buff, size_t len) {
+void http_respBodyLen(HttpClient *client, const char *buff, size_t len) {
   log_dbug("http", "<<< %d\\r\\n\n", len);
   log_dbugbin("http", buff, len, "<<< ");
   log_dbug("http", "<<< \\r\\n\n", len);
@@ -1131,7 +1117,6 @@ int http_respBodyLen(HttpClient *client, const char *buff, size_t len) {
   buff_writer_printf(writer, "%X\r\n", len);
   buff_writer_write(writer, buff, len);
   buff_writer_write(writer, "\r\n", 2);
-  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1161,6 +1146,8 @@ static const char *http_strStatus(HttpStatus status) {
     return "Not Found";
   case HTTP_STATUS_BAD_REQUEST:
     return "Bad Request";
+  case HTTP_STATUS_INTERNAL_ERROR:
+    return "Internal Error";
   }
   return NULL;
 }

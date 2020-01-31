@@ -89,7 +89,7 @@ void httpAssets_getFile(HttpClient *client) {
   int fd = arquivo_abrir(filePath);
 
   if (fd < 0) {
-    http_respNotFound(client, HTTP_TYPE_HTML, "");
+    http_respNotFound(client);
     return;
   }
 

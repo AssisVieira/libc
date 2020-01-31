@@ -72,6 +72,7 @@ typedef enum HttpStatus {
   HTTP_STATUS_OK = 200,
   HTTP_STATUS_NOT_FOUND = 404,
   HTTP_STATUS_BAD_REQUEST = 400,
+  HTTP_STATUS_INTERNAL_ERROR = 500,
 } HttpStatus;
 
 typedef void (*HttpHandlerFunc)(HttpClient *client);
@@ -83,6 +84,8 @@ typedef void (*HttpHandlerFunc)(HttpClient *client);
 int http_open(const char *port, size_t maxClients);
 
 int http_handler(const char *method, const char *path, HttpHandlerFunc func);
+
+int http_close();
 
 ////////////////////////////////////////////////////////////////////////////////
 // REQUEST FUNCTIONS
@@ -102,21 +105,22 @@ const char *http_reqArg(const HttpClient *client, int n);
 // RESPONSE FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_respNotFound(HttpClient *client, HttpMimeType mimeType,
-                      const char *str);
+void http_respNotFound(HttpClient *client);
 
-int http_respOk(HttpClient *client, HttpMimeType mimeType, const char *str);
+void http_respError(HttpClient *client);
 
-int http_respBegin(HttpClient *client, HttpStatus status,
-                   HttpMimeType mimeType);
+void http_respOk(HttpClient *client, HttpMimeType mimeType, const char *str);
 
-int http_respHeader(HttpClient *client, const char *nome, const char *valor);
+void http_respBegin(HttpClient *client, HttpStatus status,
+                    HttpMimeType mimeType);
 
-int http_respHeaderInt(HttpClient *client, const char *nome, int valor);
+void http_respHeader(HttpClient *client, const char *nome, const char *valor);
 
-int http_respBody(HttpClient *client, const char *fmt, ...);
+void http_respHeaderInt(HttpClient *client, const char *nome, int valor);
 
-int http_respBodyLen(HttpClient *client, const char *buff, size_t len);
+void http_respBody(HttpClient *client, const char *fmt, ...);
+
+void http_respBodyLen(HttpClient *client, const char *buff, size_t len);
 
 int http_respEnd(HttpClient *client);
 
