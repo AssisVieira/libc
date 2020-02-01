@@ -27,9 +27,11 @@ static size_t itoa(long long value, int radix, bool uppercase, bool unsig,
 int buff_init(Buff *buff, size_t size) {
   buff->data = malloc(size);
   buff->iread = 0;
+  buff->imarkRead = 0;
   buff->iwrite = 0;
   buff->size = size;
   buff->used = 0;
+  buff->markUsed = 0;
   buff->reader.buff = buff;
   buff->writer.buff = buff;
 
@@ -38,6 +40,40 @@ int buff_init(Buff *buff, size_t size) {
   }
 
   return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void buff_reader_iovec(BuffReader *reader, struct iovec **iovec, size_t *count,
+                       bool commit) {
+  *count = 0;
+
+  if (!commit) {
+    buff_reader_mark(reader);
+  }
+
+  while (!buff_reader_isempty(reader)) {
+    reader->buff->iov[*count].iov_base = (void *)buff_reader_data(reader);
+    reader->buff->iov[*count].iov_len = buff_reader_size(reader);
+    buff_reader_commit(reader, reader->buff->iov[*count].iov_len);
+    *count = *count + 1;
+  }
+
+  if (!commit) {
+    buff_reader_rewind(reader);
+  }
+
+  *iovec = reader->buff->iov;
+}
+
+void buff_reader_mark(const BuffReader *reader) {
+  reader->buff->imarkRead = reader->buff->iread;
+  reader->buff->markUsed = reader->buff->used;
+}
+
+void buff_reader_rewind(const BuffReader *reader) {
+  reader->buff->iread = reader->buff->imarkRead;
+  reader->buff->used = reader->buff->markUsed;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -100,7 +136,8 @@ char *buff_writer_data(BuffWriter *writer) {
 ////////////////////////////////////////////////////////////////////////////////
 
 size_t buff_writer_size(const BuffWriter *writer) {
-  return (writer->buff->iread <= writer->buff->iwrite)
+  return (writer->buff->iread <= writer->buff->iwrite &&
+          writer->buff->used < writer->buff->size)
              ? writer->buff->size - writer->buff->iwrite
              : writer->buff->iread - writer->buff->iwrite;
 }
@@ -144,8 +181,8 @@ const char *buff_reader_data(const BuffReader *reader) {
 ////////////////////////////////////////////////////////////////////////////////
 
 size_t buff_reader_size(const BuffReader *reader) {
-  return (reader->buff->iread <= reader->buff->iwrite)
-             ? reader->buff->used
+  return (reader->buff->iread < reader->buff->iwrite || reader->buff->used == 0)
+             ? reader->buff->iwrite - reader->buff->iread
              : reader->buff->size - reader->buff->iread;
 }
 
@@ -175,15 +212,15 @@ bool buff_isfull(const Buff *buff) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-size_t buff_writer_printf(BuffWriter *writer, const char *fmt, ...) {
+ssize_t buff_writer_printf(BuffWriter *writer, const char *fmt, ...) {
   va_list va;
   va_start(va, fmt);
-  size_t r = buff_writer_vprintf(writer, fmt, va);
+  ssize_t r = buff_writer_vprintf(writer, fmt, va);
   va_end(va);
   return r;
 }
 
-size_t buff_writer_vprintf(BuffWriter *writer, const char *fmt, va_list va) {
+ssize_t buff_writer_vprintf(BuffWriter *writer, const char *fmt, va_list va) {
   size_t written = 0;
 
   while (!buff_writer_isfull(writer) && *fmt) {

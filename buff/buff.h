@@ -24,6 +24,13 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <sys/uio.h>
+
+/**
+ * Número máximo de segmentos. Como a implentação é baseada em buffer circular,
+ * haverá no máximo 2 segmentos.
+ */
+#define BUFF_SEGMENTS_MAX 2
 
 typedef struct Buff Buff;
 
@@ -35,15 +42,18 @@ typedef struct BuffWriter {
   Buff *buff;
 } BuffWriter;
 
-typedef struct Buff {
+struct Buff {
   char *data;
   size_t iread;
   size_t iwrite;
+  size_t imarkRead;
   size_t size;
   size_t used;
+  size_t markUsed;
+  struct iovec iov[BUFF_SEGMENTS_MAX];
   BuffReader reader;
   BuffWriter writer;
-} Buff;
+};
 
 /**
  * Inicializa uma instância de buffer.
@@ -114,8 +124,8 @@ size_t buff_freespace(const Buff *buff);
  */
 int buff_writer_write(BuffWriter *writer, const char *data, size_t size);
 
-size_t buff_writer_vprintf(BuffWriter *writer, const char *fmt, va_list va);
-size_t buff_writer_printf(BuffWriter *writer, const char *fmt, ...);
+ssize_t buff_writer_vprintf(BuffWriter *writer, const char *fmt, va_list va);
+ssize_t buff_writer_printf(BuffWriter *writer, const char *fmt, ...);
 
 /**
  * Obtém um segmento do buffer disponível para escrita.
@@ -211,6 +221,35 @@ int buff_reader_read(BuffReader *reader, const char **data, size_t maxlen);
  * @return      vetor livre para escrita.
  */
 const char *buff_reader_data(const BuffReader *reader);
+
+/**
+ * Marca a posição do cursor de leitura, caso queira desfazer commits, voltando
+ * a posição inicial antes de realizar a leitura.
+ *
+ * @param  reader [description]
+ */
+void buff_reader_mark(const BuffReader *reader);
+
+/**
+ * Volta o curso de leitura para a posição marcada pela última chamada da função
+ * buff_reader_mark(). Caso buff_reader_mark() nunca tenha sido chamado,
+ * a chamada para buff_reader_rewind() não modificará o cursor.
+ *
+ * @param  reader leitor de buffer
+ */
+void buff_reader_rewind(const BuffReader *reader);
+
+/**
+ * Passa os segmentos de leitura para um vetor de buffers do tipo struct iovec.
+ * Esta estrutura é utilizada pelas funções de sistema writev() e readv().
+ *
+ * @param reader leitor de buffer.
+ * @param iovec  vetor de struct iovec.
+ * @param count  quantidade de elementos no vetor iovec.
+ * @param commit true, caso a leitura deva ser comitada, false, caso contrário.
+ */
+void buff_reader_iovec(BuffReader *reader, struct iovec **iovec, size_t *count,
+                       bool commit);
 
 /**
  * Obtém o tamanho do segmento retornado por buff_read_data().

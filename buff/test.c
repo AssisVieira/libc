@@ -23,13 +23,163 @@ static void testWrite();
 static void testRead();
 static void testManyReadAndWrite();
 static void testWriterPrintf();
+static void testReaderIoVecOneSegment();
+static void testReaderIoVecTwoSegments();
+static void testReadSize();
+static void testWriteSize();
 
 int main() {
+  testReadSize();
+  testWriteSize();
   testWrite();
   testRead();
   testManyReadAndWrite();
   testWriterPrintf();
+  testReaderIoVecOneSegment();
+  testReaderIoVecTwoSegments();
   return 0;
+}
+
+static void testReadSize() {
+  Buff buff;
+
+  buff_init(&buff, 10);
+
+  BuffReader *reader = buff_reader(&buff);
+  BuffWriter *writer = buff_writer(&buff);
+
+  // When buff is empty and reader == writer == 0
+  assert(buff_reader_size(reader) == 0);
+
+  // When buff is empty and reader == writer > 0
+  buff_writer_commit(writer, 4);
+  buff_reader_commit(reader, 4);
+  assert(buff_reader_size(reader) == 0);
+
+  // When buff is empty and reader and writer complete a cycle
+  buff_writer_commit(writer, 6);
+  buff_reader_commit(reader, 6);
+  assert(buff_reader_size(reader) == 0);
+
+  // When reader (0) < writer (6)
+  buff_writer_commit(writer, 6);
+  assert(buff_reader_size(reader) == 6);
+
+  // When reader (4) < writer (6)
+  buff_reader_commit(reader, 4);
+  assert(buff_reader_size(reader) == 2);
+
+  // When reader (4) > writer (0)
+  buff_writer_commit(writer, 4);
+  assert(buff_reader_size(reader) == 6);
+
+  // When reader (4) > writer (2)
+  buff_writer_commit(writer, 2);
+  assert(buff_reader_size(reader) == 6);
+
+  printf("%s is ok\n", __FUNCTION__);
+}
+
+static void testWriteSize() {
+  Buff buff;
+
+  buff_init(&buff, 10);
+
+  BuffReader *reader = buff_reader(&buff);
+  BuffWriter *writer = buff_writer(&buff);
+
+  // When buff is empty and reader == writer == 0
+  assert(buff_writer_size(writer) == 10);
+
+  // When buff is empty and writi == writer > 0
+  buff_writer_commit(writer, 4);
+  buff_reader_commit(reader, 4);
+  assert(buff_writer_size(writer) == 6);
+
+  // When buff is empty and writer and reader complete a cycle
+  buff_writer_commit(writer, 6);
+  buff_reader_commit(reader, 6);
+  assert(buff_writer_size(writer) == 10);
+
+  // When writer < reader
+  buff_writer_commit(writer, 10);
+  buff_reader_commit(reader, 6);
+  assert(buff_writer_size(writer) == 6);
+
+  // When writer > reader
+  buff_reader_commit(reader, 4);
+  buff_writer_commit(writer, 1);
+  assert(buff_writer_size(writer) == 9);
+
+  printf("%s is ok\n", __FUNCTION__);
+}
+
+static void testReaderIoVecOneSegment() {
+  Buff buff;
+
+  buff_init(&buff, 10);
+
+  BuffWriter *writer = buff_writer(&buff);
+  BuffReader *reader = buff_reader(&buff);
+
+  buff_writer_write(writer, "abcdefghij", 10);
+
+  struct iovec *iovec = NULL;
+  size_t count = 0;
+
+  buff_reader_iovec(reader, &iovec, &count, false);
+
+  assert(count == 1);
+  assert(iovec[0].iov_len == 10);
+  assert(memcmp(iovec[0].iov_base, buff_reader_data(reader), 10) == 0);
+  assert(memcmp(iovec[0].iov_base, "abcdefghij", 10) == 0);
+
+  printf("%s is ok\n", __FUNCTION__);
+}
+
+static void testReaderIoVecTwoSegments() {
+  Buff buff;
+
+  buff_init(&buff, 10);
+
+  BuffWriter *writer = buff_writer(&buff);
+  BuffReader *reader = buff_reader(&buff);
+
+  buff_writer_write(writer, "abcdefghij", 10);
+  buff_reader_commit(reader, 8);
+  buff_writer_write(writer, "klmnopqr", 8);
+
+  struct iovec *iovec = NULL;
+  size_t count = 0;
+
+  printf("---- before \n");
+  printf("buff.iread = %ld\n", buff.iread);
+  printf("buff.iwrite = %ld\n", buff.iwrite);
+  printf("buff.used = %ld\n", buff.used);
+  printf("buff.size = %ld\n", buff.size);
+  printf("buff.imarkRead = %ld\n", buff.imarkRead);
+
+  buff_reader_iovec(reader, &iovec, &count, false);
+
+  printf("---- after\n");
+  printf("buff.iread = %ld\n", buff.iread);
+  printf("buff.iwrite = %ld\n", buff.iwrite);
+  printf("buff.used = %ld\n", buff.used);
+  printf("buff.size = %ld\n", buff.size);
+  printf("buff.imarkRead = %ld\n", buff.imarkRead);
+
+  printf("count = %ld\n", count);
+  assert(count == 2);
+
+  printf("iovec[0].iov_len = %ld\n", iovec[0].iov_len);
+  assert(iovec[0].iov_len == 2);
+  assert(memcmp(iovec[0].iov_base, "ij", 2) == 0);
+
+  printf("iovec[1].iov_len = %ld\n", iovec[1].iov_len);
+  assert(iovec[1].iov_len == 8);
+  assert(memcmp(iovec[1].iov_base, "klmnopqr", 8) == 0);
+
+  printf("%s is ok\n", __FUNCTION__);
 }
 
 static void testWriterPrintf() {
@@ -62,6 +212,8 @@ static void testWriterPrintf() {
   assert(memcmp(buff_reader_data(reader), result, strlen(result)) == 0);
 
   buff_free(&buff);
+
+  printf("%s is ok\n", __FUNCTION__);
 }
 
 static void testWrite() {
@@ -82,6 +234,8 @@ static void testWrite() {
   assert(buff_freespace(&buff) == 7);
 
   buff_free(&buff);
+
+  printf("%s is ok\n", __FUNCTION__);
 }
 
 static void testRead() {
@@ -125,6 +279,8 @@ static void testRead() {
   assert(buff_isempty(&buff) == true);
 
   buff_free(&buff);
+
+  printf("%s is ok\n", __FUNCTION__);
 }
 
 static void testManyReadAndWrite() {
@@ -182,4 +338,6 @@ static void testManyReadAndWrite() {
   assert(data[2] == 'c');
 
   buff_free(&buff);
+
+  printf("%s is ok\n", __FUNCTION__);
 }
