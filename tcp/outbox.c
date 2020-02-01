@@ -17,7 +17,13 @@
 #include "outbox.h"
 #include "log/log.h"
 #include "tcp.h"
+#include <linux/in.h>
+#include <linux/socket.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+
+static const int TCPOUTBOX_TCP_NODELAY = 1;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -36,6 +42,11 @@ int tcpOutbox_init(TcpOutbox *outbox, int fd, size_t size, void *ctx,
   outbox->onFlushed = onFlushed;
 
   if (buff_init(&outbox->buff, size)) {
+    return -1;
+  }
+
+  if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &TCPOUTBOX_TCP_NODELAY,
+                 sizeof(TCPOUTBOX_TCP_NODELAY))) {
     return -1;
   }
 
@@ -91,6 +102,14 @@ static void flush(TcpOutbox *outbox) {
   TcpStatus status = tcp_write(outbox->fd, buff_reader(&outbox->buff));
 
   if (status == TCP_OK) {
+    if (outbox->ioeventInstalled) {
+      int r = ioevent_nolisten(outbox->fd, IOEVENT_TYPE_WRITE);
+      if (r != 0) {
+        outbox->onError(outbox->ctx, outbox);
+        return;
+      }
+      outbox->ioeventInstalled = false;
+    }
     outbox->onFlushed(outbox->ctx, outbox);
   }
 
@@ -101,12 +120,10 @@ static void flush(TcpOutbox *outbox) {
 
     if (!outbox->ioeventInstalled) {
       int r = ioevent_listen(outbox->fd, IOEVENT_TYPE_WRITE, outbox, onReady);
-
       if (r != 0) {
         outbox->onError(outbox->ctx, outbox);
         return;
       }
-
       outbox->ioeventInstalled = true;
     }
   }
