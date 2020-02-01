@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #ifndef TCP_H
 #define TCP_H
 
@@ -32,6 +32,18 @@ TcpStatus tcp_noblock(int fd);
 
 int tcp_listen(const char *port, int backlog);
 
+/**
+ * Escreve todo o conteúdo do buffer de forma atómica para o socket. Sempre que
+ * houver interrupção do sistema (EINTR), a escrita é re-executada.
+ *
+ * @param  fd     descritor do socket.
+ * @param  reader leitor do buffer.
+ * @return        TCP_OK, se o buffer for escrito no socket, TCP_TRY_AGAIN, se
+ *                não há espaço no socket para a escrita do buffer e TCP_ERROR
+ *                se o socket retornar algum erro desconhecido. Nesse último
+ *                caso, errno poderá ser consultado se desejar investigar o
+ *                problema.
+ */
 TcpStatus tcp_write(int fd, BuffReader *reader);
 
 TcpStatus tcp_read(int fd, BuffWriter *writer);

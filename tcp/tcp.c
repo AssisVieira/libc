@@ -16,12 +16,9 @@
 
 #include "tcp.h"
 
-// Para usar o accept4 é preciso definir esta macro.
-// Veja mais na manpage do accept4.
-#define _GNU_SOURCE
-
 #include "log/log.h"
 #include <arpa/inet.h>
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -33,7 +30,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <assert.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -82,16 +78,26 @@ TcpStatus tcp_close(int fd) {
 ////////////////////////////////////////////////////////////////////////////////
 
 TcpStatus tcp_write(int fd, BuffReader *reader) {
+  struct iovec *iovec = NULL;
+  size_t iovecCount = 0;
 
-  while (!buff_reader_isempty(reader)) {
-    ssize_t nwritten =
-        write(fd, buff_reader_data(reader), buff_reader_size(reader));
+  buff_reader_iovec(reader, &iovec, &iovecCount, false);
+
+  while (true) {
+    ssize_t nwritten = writev(fd, iovec, iovecCount);
+
+    if (nwritten >= 0) {
+      buff_reader_commit(reader, nwritten);
+      log_dbug("tcp", "(fd %d) <<< (%d bytes)\n", fd, nwritten);
+      break;
+    }
 
     if (nwritten < 0) {
       if (errno == EINTR) {
+        log_dbug("tcp", "(fd %d) <<< EINTR", fd);
         continue;
       } else if (errno == EAGAIN) {
-        log_dbug("tcp", "(fd %d) <<< TENTE DEPOIS", fd);
+        log_dbug("tcp", "(fd %d) <<< EAGAIN", fd);
         return TCP_TRY_AGAIN;
       } else {
         log_dbug("tcp", "(fd %d) <<< ERRO: %d - %s\n", fd, errno,
@@ -99,14 +105,7 @@ TcpStatus tcp_write(int fd, BuffReader *reader) {
         return TCP_ERROR;
       }
     }
-
-    log_dbugbin("tcp", buff_reader_data(reader), nwritten, "(fd %d) <<< (%d) ",
-                fd, nwritten);
-
-    buff_reader_commit(reader, nwritten);
   }
-
-  log_dbug("tcp", "(fd %d) <<< OK\n", fd);
 
   return TCP_OK;
 }
