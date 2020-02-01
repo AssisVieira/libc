@@ -13,7 +13,7 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
+
 #ifndef TCP_PORT_H
 #define TCP_PORT_H
 
@@ -24,14 +24,14 @@ typedef struct TcpPort TcpPort;
 
 typedef void (*TcpPortOnConnected)(TcpPort *port, int fd);
 
-typedef struct TcpPort {
+struct TcpPort {
   const char *port;
   int fd;
   size_t maxClients;
   size_t numClients;
   bool clientPending;
   TcpPortOnConnected onConnected;
-} TcpPort;
+};
 
 /**
  * Abre uma port TCP/IP.
