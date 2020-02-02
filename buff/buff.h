@@ -66,8 +66,20 @@ struct Buff {
  */
 int buff_init(Buff *buff, size_t size);
 
+/**
+ * Obtém um cursor de buffer para somente leitura.
+ *
+ * @param  buff buffer
+ * @return      cursor de leitura.
+ */
 BuffReader *buff_reader(Buff *buff);
 
+/**
+ * Obtém um cursor de buffer para somente escrita.
+ *
+ * @param  buff buffer
+ * @return      cursor de escrita.
+ */
 BuffWriter *buff_writer(Buff *buff);
 
 /**
@@ -114,7 +126,7 @@ size_t buff_freespace(const Buff *buff);
 /**
  * Escreve dados no final do buffer.
  *
- * @param  buff instância de buffer
+ * @param  writer cursor de escrita.
  * @param  data dados a serem copiados para o buffer.
  * @param  size quantidade de bytes a serem copiados.
  * @return      quantidade de bytes que de fato foram copiados. Este número pode
@@ -124,6 +136,15 @@ size_t buff_freespace(const Buff *buff);
  */
 int buff_writer_write(BuffWriter *writer, const char *data, size_t size);
 
+/**
+ * Escreve uma string formatada para o buffer.
+ *
+ * @param  writer cursor de escrita.
+ * @param  fmt    string fortmatada.
+ * @param  va     lista de argumentos.
+ * @return        quantidade de bytes escritos, ou -1, em caso de espaço
+ *                insuficiênte.
+ */
 ssize_t buff_writer_vprintf(BuffWriter *writer, const char *fmt, va_list va);
 ssize_t buff_writer_printf(BuffWriter *writer, const char *fmt, ...);
 
@@ -136,7 +157,7 @@ ssize_t buff_writer_printf(BuffWriter *writer, const char *fmt, ...);
  * chamada para efetivar a escrita. Caso contrário, o conteúdo escrito será
  * perdido.
  *
- * @param  buff instância de buffer.
+ * @param  writer cursor de escrita.
  * @return      vetor livre para escrita.
  */
 char *buff_writer_data(BuffWriter *writer);
@@ -144,7 +165,7 @@ char *buff_writer_data(BuffWriter *writer);
 /**
  * Obtém o tamanho do segmento retornado por buff_write_data().
  *
- * @param  buff instância de buffer.
+ * @param  writer cursor de escrita.
  * @return      quantidade de bytes disponíveis para escrita no vetor
  *              retornado por buff_write_data().
  */
@@ -197,7 +218,7 @@ bool buff_writer_isfull(const BuffWriter *writer);
  *    ...
  * }
  *
- * @param  buff instância de buffer.
+ * @param  reader cursor de leitura.
  * @param  data ponteiro que será inicializado para o início dos dados.
  * @param  maxlen quantidade máxima de bytes para leitura.
  * @return número de bytes que podem ser lidos do ponteiro data. Este número
@@ -209,7 +230,7 @@ int buff_reader_read(BuffReader *reader, const char **data, size_t maxlen);
 /**
  * Obtém um segmento do buffer disponível para leitura.
  *
- * O tamanho do vetor pode ser obtido consultando buff_read_size().
+ * O tamanho do segmento pode ser obtido consultando buff_read_size().
  *
  * Após ler o segmento, a função buff_read_commit() deve ser chamada para
  * efetivar a leitura. Caso contrário, o conteúdo lido nunca será consumido,
@@ -226,7 +247,7 @@ const char *buff_reader_data(const BuffReader *reader);
  * Marca a posição do cursor de leitura, caso queira desfazer commits, voltando
  * a posição inicial antes de realizar a leitura.
  *
- * @param  reader [description]
+ * @param  reader cursor de leitura.
  */
 void buff_reader_mark(const BuffReader *reader);
 
@@ -235,7 +256,7 @@ void buff_reader_mark(const BuffReader *reader);
  * buff_reader_mark(). Caso buff_reader_mark() nunca tenha sido chamado,
  * a chamada para buff_reader_rewind() não modificará o cursor.
  *
- * @param  reader leitor de buffer
+ * @param  reader cursor de leitura.
  */
 void buff_reader_rewind(const BuffReader *reader);
 
@@ -243,7 +264,7 @@ void buff_reader_rewind(const BuffReader *reader);
  * Passa os segmentos de leitura para um vetor de buffers do tipo struct iovec.
  * Esta estrutura é utilizada pelas funções de sistema writev() e readv().
  *
- * @param reader leitor de buffer.
+ * @param reader cursor de leitura.
  * @param iovec  vetor de struct iovec.
  * @param count  quantidade de elementos no vetor iovec.
  * @param commit true, caso a leitura deva ser comitada, false, caso contrário.
