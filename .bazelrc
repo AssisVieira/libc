@@ -1,3 +1,4 @@
 build --copt='-Wall'
 build --copt='-Werror'
 build --copt='-std=c99'
+build --copt='-D_GNU_SOURCE'
