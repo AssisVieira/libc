@@ -3,62 +3,46 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct HashTableNode {
-  char *key;
-  void *value;
-  struct HashTableNode *next;
-} HashTableNode;
-
-struct HashTable {
-  HashTableNode **table;
-  size_t module;
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 
 static size_t hashTable_hash(const char *str, size_t module);
 static HashTableNode *hashTable_nodeSearch(HashTableNode *node,
                                            const char *key);
-static HashTableNode *hashTable_nodeNew(const char *key, void *value,
-                                        HashTableNode *next);
 static void hashTable_nodeFree(HashTableNode **node);
-static size_t hashTable_nodeCount(const HashTableNode *node);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-HashTable *hashTable_new(size_t module) {
-  HashTable *hashTable = malloc(sizeof(HashTable));
-
+int hashTable_init(HashTable *hashTable, size_t module) {
   if (hashTable == NULL) {
-    return NULL;
+    goto error;
   }
 
   hashTable->module = module;
   hashTable->table = malloc(sizeof(HashTableNode *) * module);
 
   if (hashTable->table == NULL) {
-    return NULL;
+    goto error;
   }
 
   for (size_t i = 0; i < module; i++) {
     hashTable->table[i] = NULL;
   }
 
-  return hashTable;
+  return 0;
+
+error:
+  hashTable_free(hashTable);
+  return -1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void hashTable_free(HashTable **hashTable) {
-  for (size_t i = 0; i < (*hashTable)->module; i++) {
-    hashTable_nodeFree(&(*hashTable)->table[i]);
+void hashTable_free(HashTable *hashTable) {
+  for (size_t i = 0; i < hashTable->module; i++) {
+    hashTable_nodeFree(&hashTable->table[i]);
   }
 
-  free((*hashTable)->table);
-
-  free(*hashTable);
-
-  *hashTable = NULL;
+  free(hashTable->table);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,20 +64,26 @@ bool hashTable_contains(const HashTable *hashTable, const char *key) {
 int hashTable_set(HashTable *hashTable, const char *key, void *value) {
   size_t hash = hashTable_hash(key, hashTable->module);
 
-  HashTableNode *nodeHead = hashTable->table[hash];
+  HashTableNode *headNode = hashTable->table[hash];
 
-  HashTableNode *node = hashTable_nodeSearch(nodeHead, key);
+  HashTableNode *oldNode = hashTable_nodeSearch(headNode, key);
 
-  if (node != NULL && strcmp(node->key, key) == 0) {
-    node->value = value;
+  if (oldNode != NULL && strcmp(oldNode->key, key) == 0) {
+    oldNode->value = value;
     return 0;
   }
 
-  hashTable->table[hash] = hashTable_nodeNew(key, value, nodeHead);
+  HashTableNode *newNode = malloc(sizeof(HashTableNode));
 
-  if (hashTable->table[hash] == NULL) {
+  if (newNode == NULL) {
     return -1;
   }
+
+  newNode->key = (key != NULL) ? strdup(key) : NULL;
+  newNode->value = value;
+  newNode->next = hashTable->table[hash];
+
+  hashTable->table[hash] = newNode;
 
   return 0;
 }
@@ -115,22 +105,51 @@ void *hashTable_value(const HashTable *hashTable, const char *key) {
 ////////////////////////////////////////////////////////////////////////////////
 
 size_t hashTable_count(const HashTable *hashTable) {
+  HashTableNode *node = NULL;
   size_t count = 0;
   for (int i = 0; i < hashTable->module; i++) {
-    count += hashTable_nodeCount(hashTable->table[i]);
+    node = hashTable->table[i];
+    while (node != NULL) {
+      ++count;
+      node = node->next;
+    }
   }
   return count;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static size_t hashTable_nodeCount(const HashTableNode *node) {
-  size_t count = 0;
-  while (node != NULL) {
-    count++;
-    node = node->next;
+void hashTable_it(HashTable *hashTable, HashTableIt *it) {
+  it->hashTable = hashTable;
+  it->node = NULL;
+  it->row = -1;
+}
+
+const char *hashTable_itKey(HashTableIt *it) { return it->node->key; }
+
+////////////////////////////////////////////////////////////////////////////////
+
+void *hashTable_itValue(HashTableIt *it) { return it->node->value; }
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool hashTable_itNext(HashTableIt *it) {
+  if (it->node == NULL || it->node->next == NULL) {
+    for (it->row = it->row + 1; it->row < it->hashTable->module; it->row++) {
+      it->node = it->hashTable->table[it->row];
+      if (it->node != NULL) {
+        return true;
+      }
+    }
+    return false;
   }
-  return count;
+
+  if (it->node->next != NULL) {
+    it->node = it->node->next;
+    return true;
+  }
+
+  return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -144,19 +163,6 @@ static HashTableNode *hashTable_nodeSearch(HashTableNode *node,
     node = node->next;
   }
   return NULL;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-static HashTableNode *hashTable_nodeNew(const char *key, void *value,
-                                        HashTableNode *next) {
-  HashTableNode *node = malloc(sizeof(HashTableNode));
-  if (node != NULL) {
-    node->key = (key != NULL) ? strdup(key) : NULL;
-    node->value = value;
-    node->next = next;
-  }
-  return node;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

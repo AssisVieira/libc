@@ -4,15 +4,31 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-typedef struct HashTable HashTable;
+typedef struct HashTableNode {
+  char *key;
+  void *value;
+  struct HashTableNode *next;
+} HashTableNode;
+
+typedef struct HashTable {
+  HashTableNode **table;
+  size_t module;
+} HashTable;
+
+typedef struct HashTableIt {
+  size_t row;
+  HashTableNode *node;
+  HashTable *hashTable;
+} HashTableIt;
 
 /**
- * Cria uma tabela hash, onde a chave é do tipo string e o valor é um objeto.
+ * Inicializa uma tabela hash, onde a chave é do tipo string e o valor é um
+ * objeto.
  *
  * @param  modulo altura da tabela hash;
  * @return instancia da tabela ou NULL, caso não há memória suficiente.
  */
-HashTable *hashTable_new(size_t module);
+int hashTable_init(HashTable *hashTable, size_t module);
 
 /**
  * Insere o valor de uma chave.
@@ -25,11 +41,47 @@ HashTable *hashTable_new(size_t module);
 int hashTable_set(HashTable *hashTable, const char *key, void *value);
 
 /**
+ * Inicializa o iterador para percorrer as entradas da tabela.
+ *
+ * @param hashTable tabela hash a ser percorrida.
+ * @param it        iterador para ser inicializado.
+ */
+void hashTable_it(HashTable *hashTable, HashTableIt *it);
+
+/**
+ * Obtém a chave da entrada atual do iterador.
+ *
+ * @param  it iterador.
+ * @return    chave.
+ */
+const char *hashTable_itKey(HashTableIt *it);
+
+/**
+ * Obtém o valor da entrada atual do iterador.
+ *
+ * @param  it iterador
+ * @return    valor
+ */
+void *hashTable_itValue(HashTableIt *it);
+
+/**
+ * Verifica se existe alguma entrada, se houver, avança para a próxima.
+ *
+ * Esta função deve sempre ser chamada antes de consultar a chave e o valor da
+ * entrada atual do iterador.
+ *
+ * @param  it iterador
+ * @return    true, caso existe uma entrada para ser consultada, false, caso
+ * contrário.
+ */
+bool hashTable_itNext(HashTableIt *it);
+
+/**
  * Destroi a tabela, porém mantém intacto os valores de cada chave.
  *
  * @param hashTable tabela.
  */
-void hashTable_free(HashTable **hashTable);
+void hashTable_free(HashTable *hashTable);
 
 /**
  * Calcula e retorna a quantidade de entradas na tabela.
