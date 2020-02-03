@@ -15,7 +15,7 @@
  ******************************************************************************/
 
 #include "db/db.h"
-#include "http/assets.h"
+#include "assets/httpAssets.h"
 #include "http/http.h"
 #include "httpPeople.h"
 #include "log/log.h"
@@ -25,13 +25,13 @@
 int main() {
   int r = 0;
 
-  // log_ignore("tcp", LOG_INFO);
-  // log_ignore("tcp-inbox", LOG_INFO);
-  // // log_ignore("tcp-outbox", LOG_INFO);
-  // log_ignore("tcp-port", LOG_INFO);
-  // log_ignore("ioevent", LOG_INFO);
-  log_ignore("http", LOG_INFO);
-  // log_ignore("db", LOG_INFO);
+  log_ignore("tcp", LOG_INFO);
+  log_ignore("tcp-inbox", LOG_INFO);
+  log_ignore("tcp-outbox", LOG_INFO);
+  log_ignore("tcp-port", LOG_INFO);
+  log_ignore("ioevent", LOG_INFO);
+  log_ignore("http", LOG_TRAC);
+  log_ignore("db", LOG_TRAC);
 
   // Startup...
 
@@ -39,7 +39,7 @@ int main() {
     return -1;
   }
 
-  if (db_openPool(50, 50)) {
+  if (db_openPool(5, 10)) {
     perror("db_openPool()\n");
     return -1;
   }
@@ -52,6 +52,10 @@ int main() {
   http_handler("GET", "/web/(.*)", httpAssets_getFile);
 
   http_handler("GET", "/people/search$", httpPeople_search);
+
+  http_handler("GET", "/people/add$", httpPeople_addForm);
+
+  http_handler("POST", "/people/add$", httpPeople_add);
 
   if (http_open("2000", 100)) {
     log_erro("http", "http_open().\n");

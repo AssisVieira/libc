@@ -13,13 +13,14 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
+ 
+#ifndef HTTP_ASSETS_H
+#define HTTP_ASSETS_H
 
-#ifndef HTTP_PEOPLE_H
-#define HTTP_PEOPLE_H
+#include "http.h"
 
-#include "http/http.h"
+int httpAssets_init(const char *dir);
 
-void httpPeople_searchView(HttpClient *client);
-void httpPeople_search(HttpClient *client);
+void httpAssets_getFile(HttpClient *client);
 
 #endif

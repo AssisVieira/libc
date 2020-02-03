@@ -21,8 +21,8 @@
 
 static void onPeopleSearchResp(PeopleSearchSig *sig, PeopleStatus status);
 
-void httpPeople_searchView(HttpClient *client) {
-  http_respOk(client, HTTP_TYPE_HTML, "search view");
+void httpPeople_addForm(HttpClient *client) {
+  http_respOk(client, HTTP_TYPE_HTML, assets_get("people/addForm.html"));
 }
 
 void httpPeople_search(HttpClient *client) {
