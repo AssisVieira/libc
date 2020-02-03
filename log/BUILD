@@ -1,5 +1,5 @@
 ################################################################################
-#   Copyright 2019 Assis Vieira
+#   Copyright 2020 Assis Vieira
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -14,38 +14,35 @@
 #   limitations under the License.
 ################################################################################
 
-cc_library(
-    name = "log",
-    srcs = glob(["log.c", "log.h"]),
-    hdrs = ["log.h"],
-    visibility = ["//visibility:public"],
-)
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 cc_library(
-    name = "log-dbg",
-    local_defines = ["DEBUG"],
-    srcs = glob(["log.c", "log.h"]),
+    name = "log",
+    srcs = [
+        "log.c",
+        "log.h",
+    ],
     hdrs = ["log.h"],
     visibility = ["//visibility:public"],
 )
 
 cc_binary(
     name = "example1",
-    srcs = glob(["example1.c"]),
-    deps = [":log-dbg"],
+    srcs = ["example1.c"],
     visibility = ["//visibility:public"],
+    deps = [":log"],
 )
 
 cc_binary(
     name = "example2",
-    srcs = glob(["example2.c"]),
-    deps = [":log-dbg"],
+    srcs = ["example2.c"],
     visibility = ["//visibility:public"],
+    deps = [":log"],
 )
 
 cc_binary(
     name = "example3",
-    srcs = glob(["example3.c"]),
-    deps = [":log-dbg"],
+    srcs = ["example3.c"],
     visibility = ["//visibility:public"],
+    deps = [":log"],
 )

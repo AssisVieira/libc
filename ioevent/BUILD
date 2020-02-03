@@ -14,17 +14,28 @@
 #   limitations under the License.
 ################################################################################
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 cc_library(
     name = "ioevent",
-    srcs = glob(["*.c", "*.h"]),
+    srcs = glob(
+        [
+            "*.c",
+            "*.h",
+        ],
+        exclude = ["*test.c"],
+    ),
     hdrs = ["ioevent.h"],
     visibility = ["//visibility:public"],
-    deps = ["//vetor", "//log"]
+    deps = [
+        "//log",
+        "//vetor",
+    ],
 )
 
 cc_test(
-    name = "teste",
-    srcs = glob(["teste.cpp"]),
+    name = "test",
+    srcs = ["test.c"],
     visibility = ["//visibility:public"],
-    deps = [":ioevent"]
+    deps = [":ioevent"],
 )

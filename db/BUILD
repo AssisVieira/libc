@@ -14,9 +14,11 @@
 #   limitations under the License.
 ################################################################################
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 cc_library(
     name = "db",
-    srcs = glob(["*.c", "*.h"]),
+    srcs = glob(["*.c", "*.h"], exclude = ["*test.c"]),
     hdrs = glob(["*.h"]),
     visibility = ["//visibility:public"],
     deps = ["//log", "//ioevent"],
@@ -24,9 +26,9 @@ cc_library(
 )
 
 
-cc_binary(
+cc_test(
     name = "test",
-    srcs = glob(["test.c"]),
+    srcs = ["test.c"],
     linkstatic = True,
     deps = [":db"],
     visibility = ["//visibility:public"]

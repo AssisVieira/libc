@@ -14,15 +14,17 @@
 #   limitations under the License.
 ################################################################################
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 cc_library(
     name = "vetor",
-    srcs = glob(["vetor.c", "vetor.h"]),
+    srcs = ["vetor.c", "vetor.h"],
     hdrs = ["vetor.h"],
     visibility = ["//visibility:public"],
 )
 
 cc_test(
     name = "teste",
-    srcs = glob(["teste.c"]),
+    srcs = ["teste.c"],
     deps = [":vetor"],
 )

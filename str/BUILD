@@ -14,33 +14,38 @@
 #   limitations under the License.
 ################################################################################
 
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
 cc_library(
     name = "str",
-    srcs = glob(["str.c", "str.h"]),
+    srcs = [
+        "str.c",
+        "str.h",
+    ],
     hdrs = ["str.h"],
     visibility = ["//visibility:public"],
 )
 
 cc_test(
     name = "test",
-    srcs = glob(["test.c"]),
+    srcs = ["test.c"],
     deps = [":str"],
 )
 
 cc_binary(
     name = "ascii-lower-case",
-    srcs = glob(["ascii-lower-case.c"]),
+    srcs = ["ascii-lower-case.c"],
     deps = [],
 )
 
 cc_binary(
     name = "benchmark",
-    srcs = glob(["benchmark.c"]),
+    srcs = ["benchmark.c"],
     deps = [":str"],
 )
 
 cc_binary(
     name = "example",
-    srcs = glob(["example.c"]),
+    srcs = ["example.c"],
     deps = [":str"],
 )

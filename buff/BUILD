@@ -14,16 +14,21 @@
 #   limitations under the License.
 ################################################################################
 
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
 cc_library(
-  name = "buff",
-  srcs = glob(["buff.c", "buff.h"]),
-  hdrs = ["buff.h"],
-  visibility = ["//visibility:public"]
+    name = "buff",
+    srcs = [
+        "buff.c",
+        "buff.h",
+    ],
+    hdrs = ["buff.h"],
+    visibility = ["//visibility:public"],
 )
 
 cc_test(
-  name = "test",
-  srcs = glob(["test.c"]),
-  visibility = ["//visibility:public"],
-  deps = [":buff"]
+    name = "test",
+    srcs = ["test.c"],
+    visibility = ["//visibility:public"],
+    deps = [":buff"],
 )
