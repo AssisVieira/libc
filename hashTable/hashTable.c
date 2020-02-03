@@ -1,4 +1,5 @@
 #include "hashTable.h"
+
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,11 +39,16 @@ error:
 ////////////////////////////////////////////////////////////////////////////////
 
 void hashTable_free(HashTable *hashTable) {
-  for (size_t i = 0; i < hashTable->module; i++) {
-    hashTable_nodeFree(&hashTable->table[i]);
+  if (hashTable->table != NULL) {
+    for (size_t i = 0; i < hashTable->module; i++) {
+      hashTable_nodeFree(&hashTable->table[i]);
+    }
   }
 
   free(hashTable->table);
+
+  hashTable->module = 0;
+  hashTable->table = NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
