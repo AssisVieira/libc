@@ -14,7 +14,7 @@
 #   limitations under the License.
 ################################################################################
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 cc_library(
     name = "assets",
@@ -28,15 +28,15 @@ cc_library(
     hdrs = ["assets.h"],
     visibility = ["//visibility:public"],
     deps = [
-        "//buff",
-        "//log",
         "//hashTable",
+        "//log",
     ],
 )
 
-# cc_test(
-#     name = "test",
-#     srcs = ["test.c"],
-#     visibility = ["//visibility:public"],
-#     deps = [":buff"],
-# )
+cc_test(
+    name = "test",
+    srcs = ["test.c"],
+    visibility = ["//visibility:public"],
+    deps = [":assets"],
+    data = ["example"]
+)

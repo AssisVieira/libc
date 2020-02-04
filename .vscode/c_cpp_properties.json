@@ -5,45 +5,18 @@
             "includePath": [
                 "${workspaceFolder}/**"
             ],
-            "defines": [],
+            "defines": [
+            ],
             "compilerPath": "/usr/bin/clang",
             "cStandard": "c11",
             "cppStandard": "c++17",
             "intelliSenseMode": "clang-x64",
             "compilerArgs": [
-                "-Wall -Werror -std=c99 -D_GNU_SOURCE"
-            ]
-        },
-        {
-            "name": "x",
-            "includePath": [
-                "${workspaceFolder}/**"
-            ],
-            "defines": [],
-            "compilerPath": "/usr/bin/clang",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "clang-x64",
-            "compilerArgs": [],
-            "browse": {
-                "path": [
-                    "${workspaceFolder}/**"
-                ],
-                "limitSymbolsToIncludedHeaders": true
-            }
-        },
-        {
-            "name": "Linux",
-            "includePath": [
-                "${workspaceFolder}/**"
-            ],
-            "defines": [],
-            "compilerPath": "/usr/bin/clang",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "clang-x64",
-            "compilerArgs": [
-                "-Wall -Werror -std=c99 "
+                "-Wall",
+                "-Werror",
+                "-std=c11",
+                "-D_GNU_SOURCE",
+                "-D_DEFAULT_SOURCE"
             ]
         }
     ],
