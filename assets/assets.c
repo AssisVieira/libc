@@ -45,7 +45,7 @@ static char *assets_makePath(char *path, size_t pathSize, const char *dirPath,
 ////////////////////////////////////////////////////////////////////////////////
 
 int assets_open(const char *dirPath) {
-  strncat(assets.dir, dirPath, sizeof(assets.dir));
+  strncat(assets.dir, dirPath, PATH_MAX-1);
 
   if (hashTable_init(&assets.files, 100)) {
     log_erro("assets", "hashTable_init(): %d - %s\n", errno, strerror(errno));
@@ -117,7 +117,7 @@ static int assets_addFile(const char *path) {
   file->buff = NULL;
   file->size = 0;
 
-  strncat(file->path, path, PATH_MAX);
+  strcat(file->path, path);
 
   fd = open(file->path, O_RDONLY);
 
@@ -221,11 +221,15 @@ static int assets_addDir(const char *dirPath) {
     }
   }
 
-  closedir(dr);
+  if (dr != NULL) {
+    closedir(dr);
+  }
   return 0;
 
 error:
-  closedir(dr);
+  if (dr != NULL) {
+    closedir(dr);
+  }
   return -1;
 }
 
