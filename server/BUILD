@@ -14,29 +14,27 @@
 #   limitations under the License.
 ################################################################################
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
 
 cc_library(
-    name = "tcp",
-    srcs = glob(
+    name = "server",
+    srcs =
         [
-            "*.c",
-            "*.h",
+            "server.c",
+            "server.h",
         ],
-        exclude = ["*test.c"],
-    ),
-    hdrs = glob(["*.h"]),
+    hdrs = ["server.h"],
     visibility = ["//visibility:public"],
     deps = [
+        "//io",
         "//buff",
-        "//ioevent",
         "//log",
     ],
 )
 
-cc_test(
+cc_binary(
     name = "test",
     srcs = ["test.c"],
     visibility = ["//visibility:public"],
-    deps = [":tcp"],
+    deps = [":server", "//log"],
 )
