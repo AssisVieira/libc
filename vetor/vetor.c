@@ -59,12 +59,12 @@ Vetor *vetor_criar(size_t capacidadeInicial) {
 // DESTRUIR VETOR
 ////////////////////////////////////////////////////////////////////////////////
 
-int vetor_destruir(Vetor *vetor) {
-  assert(vetor != NULL);
+void vetor_destruir(Vetor *vetor) {
+  if (vetor == NULL) return;
   vetor->capacidade = 0;
   vetor->qtd = 0;
   free(vetor->itens);
-  return 0;
+  free(vetor);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -38,7 +38,7 @@ size_t vetor_add(Vetor *vetor, void *objeto);
 
 void vetor_inserir(Vetor *vetor, size_t indice, void *objeto);
 
-int vetor_destruir(Vetor *vetor);
+void vetor_destruir(Vetor *vetor);
 
 void vetor_visitar(Vetor *vetor, FuncVisitante visitante);
 
