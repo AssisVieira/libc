@@ -274,4 +274,15 @@ const str_t *str_null();
  */
 str_t *str_move(str_t **str);
 
+/**
+ * Remove uma parte da string.
+ * 
+ * @param  str    string a ser modificada.
+ * @param  start  índice da primeira posição a ser removida, inclusive.
+ * @param  count  quantidade de posições a serem removidas.
+ * @return        0, em caso de sucesso, -1, em caso de erros.
+ */
+int str_rm(str_t *str, int start, int count);
+
+
 #endif

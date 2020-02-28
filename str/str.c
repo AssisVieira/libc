@@ -15,6 +15,7 @@
  ******************************************************************************/
 
 #include "str.h"
+
 #include <assert.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -320,7 +321,6 @@ str_t *str_clone(const str_t *str) {
 
 static size_t itoa(long long value, int radix, bool uppercase, bool unsig,
                    char *buff, size_t zero_pad) {
-  assert(buff != NULL);
   const char digit1[] = "0123456789ABCDEF";
   const char digit2[] = "0123456789abcdf";
   const char *digit = (uppercase) ? digit1 : digit2;
@@ -329,8 +329,14 @@ static size_t itoa(long long value, int radix, bool uppercase, bool unsig,
   size_t i;
   size_t len;
 
-  if (radix > 16)
+  if (value == 0) {
+    buff[0] = '0';
+    return 1;
+  }
+
+  if (radix > 16) {
     return 0;
+  }
 
   if (value < 0 && !unsig) {
     negative = 1;
@@ -340,13 +346,15 @@ static size_t itoa(long long value, int radix, bool uppercase, bool unsig,
   while (value > 0) {
     *buffp++ = digit[value % radix];
     value /= radix;
-  };
+  }
 
-  for (i = 0; i < zero_pad; i++)
+  for (i = 0; i < zero_pad; i++) {
     *buffp++ = '0';
+  }
 
-  if (negative)
+  if (negative) {
     *buffp++ = '-';
+  }
 
   len = (size_t)(buffp - buff);
   for (i = 0; i < len / 2; i++) {
@@ -424,4 +432,22 @@ str_t *str_move(str_t **str) {
   str_t *tmp = *str;
   *str = str_new(tmp->size);
   return tmp;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int str_rm(str_t *str, int start, int count) {
+  int end = start + count;
+  
+  if (start < 0 || end <= 0 || start > end || end > str->length) {
+    return -1;
+  }
+  
+  for (int i = end; i <= str->length; i++) {
+    str->buff[start++] = str->buff[i];
+  }
+  
+  str->length = str->length - count;
+
+  return 0;
 }

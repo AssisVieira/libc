@@ -14,12 +14,13 @@
  *   limitations under the License.
  ******************************************************************************/
 
-#include "str.h"
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "str.h"
 
 typedef struct test_t {
   size_t size;
@@ -232,6 +233,30 @@ static void testFmt() {
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
   }
+  {
+    const int arg1 = 0;
+    const char *fmt = "%d";
+    const char *strResp = "0";
+    //---
+    const size_t strRespLen = strlen(strResp);
+    str_t *str = str_new(strRespLen + 1);
+    size_t bytesAdded = str_fmt(str, fmt, arg1);
+    assert(bytesAdded == strRespLen);
+    assert(str_cmpcstr(str, strResp) == 0);
+    str_free(&str);
+  }
+  {
+    const int arg1 = 10;
+    const char *fmt = "%d";
+    const char *strResp = "10";
+    //---
+    const size_t strRespLen = strlen(strResp);
+    str_t *str = str_new(strRespLen + 1);
+    size_t bytesAdded = str_fmt(str, fmt, arg1);
+    assert(bytesAdded == strRespLen);
+    assert(str_cmpcstr(str, strResp) == 0);
+    str_free(&str);
+  }
 }
 
 /**
@@ -374,6 +399,85 @@ static void testExpand() {
   str_free(&str);
 }
 
+static void testRm() {
+  {
+    str_t *str = str_clonecstr("abcdef");
+
+    assert(str_rm(str, 0, 2) == 0);
+    assert(str_len(str) == 4);
+    assert(str_size(str) == 7);
+    assert(str_cmpcstr(str, "cdef") == 0);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_clonecstr("");
+
+    assert(str_rm(str, 0, 1) == -1);
+    assert(str_len(str) == 0);
+    assert(str_size(str) == 1);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_clonecstr("");
+
+    assert(str_rm(str, 0, 0) == -1);
+    assert(str_len(str) == 0);
+    assert(str_size(str) == 1);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_clonecstr("");
+
+    assert(str_rm(str, 1, 0) == -1);
+    assert(str_len(str) == 0);
+    assert(str_size(str) == 1);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_clonecstr("abc");
+
+    assert(str_rm(str, 0, 1) == 0);
+    assert(str_len(str) == 2);
+    assert(str_size(str) == 4);
+    assert(str_cmpcstr(str, "bc") == 0);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_clonecstr("abc");
+
+    assert(str_rm(str, 2, 1) == 0);
+    assert(str_len(str) == 2);
+    assert(str_size(str) == 4);
+    assert(str_cmpcstr(str, "ab") == 0);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_clonecstr("abc");
+
+    assert(str_rm(str, 1, 1) == 0);
+    assert(str_len(str) == 2);
+    assert(str_size(str) == 4);
+    assert(str_cmpcstr(str, "ac") == 0);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_clonecstr("abc");
+
+    assert(str_rm(str, 0, 3) == 0);
+    assert(str_len(str) == 0);
+    assert(str_size(str) == 4);
+
+    str_free(&str);
+  }
+}
+
 int main() {
   testBasic();
   testStrCaseCmp();
@@ -385,5 +489,6 @@ int main() {
   testAdd();
   testLength();
   testFmt();
+  testRm();
   return 0;
 }
