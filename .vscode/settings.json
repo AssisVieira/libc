@@ -20,10 +20,23 @@
     "type_traits": "c",
     "utility": "c",
     "bit": "c",
-    "new": "c"
+    "new": "c",
+    "limits.h": "c",
+    "stat.h": "c",
+    "chrono": "c",
+    "functional": "c",
+    "istream": "c",
+    "ostream": "c",
+    "ratio": "c",
+    "db.h": "c",
+    "threads.h": "c"
   },
   "files.exclude": {
     "**/bazel-*": true,
-    "**/.vscode": true
+    "**/.vscode": true,
+    "**/.classpath": true,
+    "**/.project": true,
+    "**/.settings": true,
+    "**/.factorypath": true
   }
 }

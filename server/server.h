@@ -32,6 +32,8 @@ int server_start(ServerParams params);
 
 void server_send(int clientFd, const void *buff, size_t size);
 
+void server_close(int clientFd);
+
 void server_stop(int result);
 
 #endif

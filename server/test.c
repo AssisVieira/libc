@@ -4,7 +4,7 @@
 
 #include "buff/buff.h"
 #include "log/log.h"
-#include "tcp/server.h"
+#include "server.h"
 
 #define COMANDO_MAX_SIZE 128
 #define STATUS_MAX_SIZE 64

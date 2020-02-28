@@ -57,9 +57,6 @@ void io_close(int result) {
   log_dbug("io", "Fechando io...\n");
   io.close = true;
   io.closeResult = result;
-  // TODO: Talvez seja necessário enviar uma notificação pro loop sair da
-  // espera, detectar a mudança de estado do io e assim encerrar a execução
-  // do io.
 }
 
 ////////////////////////////////////////////////////////////////////////////////

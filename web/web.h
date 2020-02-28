@@ -13,14 +13,22 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  ******************************************************************************/
- 
-#ifndef HTTP_ASSETS_H
-#define HTTP_ASSETS_H
 
-#include "http.h"
+#ifndef WEB_H
+#define WEB_H
 
-int httpAssets_init(const char *dir);
+#include "http/http.h"
 
-void httpAssets_getFile(HttpClient *client);
+typedef void (*WebHandler)(HttpClient *client);
+
+void web_handler(const char *method, const char *path, WebHandler handler);
+
+int web_start();
+
+void web_close(int result);
+
+void web_assets(const char *from, const char *to);
+
+void web_redirect(const char *from, const char *to);
 
 #endif

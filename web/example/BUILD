@@ -14,32 +14,13 @@
 #   limitations under the License.
 ################################################################################
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
-
-cc_library(
-    name = "http",
-    srcs = glob(
-        [
-            "*.c",
-            "*.h",
-        ],
-        exclude = ["*_test.c"],
-    ),
-    hdrs = ["http.h"],
-    linkopts = ["-lrt"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//buff",
-        "//log",
-        "//server",
-        "//vetor",
-        "//str"
-    ],
-)
+load("@rules_cc//cc:defs.bzl", "cc_binary")
 
 cc_binary(
-    name = "test",
-    srcs = ["test.c"],
+    name = "example",
+    srcs = glob(["*.c", "*.h"]),
+    linkstatic = True,
+    deps = ["//web"],
     visibility = ["//visibility:public"],
-    deps = [":http", "//log"],
+    data = ["public"]
 )

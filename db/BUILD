@@ -21,7 +21,7 @@ cc_library(
     srcs = glob(["*.c", "*.h"], exclude = ["*test.c"]),
     hdrs = glob(["*.h"]),
     visibility = ["//visibility:public"],
-    deps = ["//log", "//ioevent"],
+    deps = ["//log", "//io"],
     linkopts = ["-lpq"]
 )
 

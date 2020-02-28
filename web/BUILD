@@ -14,11 +14,12 @@
 #   limitations under the License.
 ################################################################################
 
-cc_binary(
-    name = "exemplo",
-    srcs = glob(["*.c", "*.h"]),
-    linkstatic = True,
-    deps = ["//http", "//db"],
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "web",
+    srcs = ["web.c", "web.h"],
+    hdrs = ["web.h"],
+    deps = ["//http", "//assets", "//db"],
     visibility = ["//visibility:public"],
-    data = ["web"]
 )

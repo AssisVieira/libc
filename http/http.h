@@ -14,10 +14,11 @@
  *   limitations under the License.
  ******************************************************************************/
 
-#ifndef HTTP_SERVER_H
-#define HTTP_SERVER_H
+#ifndef HTTP_H
+#define HTTP_H
 
 #include <stddef.h>
+#include "str/str.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -28,6 +29,8 @@
 #define HEADER_NAME_MAX 128
 #define HEADER_VALUE_MAX 512
 #define HEADERS_MAX 32
+
+#define HTTP_RESP_INIT_SIZE (4 * 1024)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,13 +45,16 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define TCP_INBOX_SIZE (4 * 1024)
-#define TCP_OUTBOX_MAX_SIZE (512 * 1024)
+#define INBOX_MAX_SIZE (4 * 1024)
 
 ////////////////////////////////////////////////////////////////////////////////
 
 #define ARGS_MAX 4
 #define ARG_MAX URI_MAX
+
+////////////////////////////////////////////////////////////////////////////////
+
+#define BODY_MAX (6 * 1024)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -75,53 +81,52 @@ typedef enum HttpStatus {
   HTTP_STATUS_INTERNAL_ERROR = 500,
 } HttpStatus;
 
-typedef void (*HttpHandlerFunc)(HttpClient *client);
+////////////////////////////////////////////////////////////////////////////////
+
+typedef void (*HttpHandlerFunc)(int clientFd);
 
 ////////////////////////////////////////////////////////////////////////////////
 // STARTUP FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_open(const char *port, size_t maxClients);
+int http_start(int port, size_t maxClients);
 
 int http_handler(const char *method, const char *path, HttpHandlerFunc func);
 
-int http_close();
+void http_stop(int result);
 
 ////////////////////////////////////////////////////////////////////////////////
 // REQUEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *http_reqHeader(const HttpClient *client, const char *name);
+const char *http_reqHeader(int clientFd, const char *name);
 
-const char *http_reqParam(const HttpClient *client, const char *name);
+const char *http_reqParam(int clientFd, const char *name);
 
-const char *http_reqMethod(const HttpClient *client);
+const char *http_reqMethod(int clientFd);
 
-const char *http_reqPath(const HttpClient *client);
+const char *http_reqPath(int clientFd);
 
-const char *http_reqArg(const HttpClient *client, int n);
+const char *http_reqArg(int clientFd, int n);
+
+const char *http_reqBody(int clientFd);
 
 ////////////////////////////////////////////////////////////////////////////////
 // RESPONSE FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_respNotFound(HttpClient *client);
+void http_sendNotFound(int clientFd);
 
-void http_respError(HttpClient *client);
+void http_sendError(int clientFd);
 
-void http_respOk(HttpClient *client, HttpMimeType mimeType, const char *str);
+void http_sendStatus(int clientFd, HttpStatus status);
 
-void http_respBegin(HttpClient *client, HttpStatus status,
-                    HttpMimeType mimeType);
+void http_sendType(int clientFd, HttpMimeType mimeType);
 
-void http_respHeader(HttpClient *client, const char *nome, const char *valor);
+void http_sendHeader(int clientFd, const char *nome, const char *valor);
 
-void http_respHeaderInt(HttpClient *client, const char *nome, int valor);
+void http_sendHeaderInt(int clientFd, const char *nome, int valor);
 
-void http_respBody(HttpClient *client, const char *fmt, ...);
-
-void http_respBodyLen(HttpClient *client, const char *buff, size_t len);
-
-int http_respEnd(HttpClient *client);
+void http_send(int clientFd, const str_t *body);
 
 #endif

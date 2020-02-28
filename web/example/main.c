@@ -14,13 +14,23 @@
  *   limitations under the License.
  ******************************************************************************/
 
-#ifndef HTTP_PEOPLE_H
-#define HTTP_PEOPLE_H
+#include "web/web.h"
+#include "webPeoples.h"
 
-#include "http/http.h"
+int main() {
+  // Module People
+  web_handler("GET", "/peoples$", webPeoples_list);
+  web_handler("POST", "/peoples$", webPeoples_add);
+  web_handler("DELETE", "/peoples/(.*)$", webPeoples_remove);
+  web_handler("PUT", "/peoples/(.*)$", webPeoples_update);
+  web_handler("GET", "/peoples/(.*)$", webPeoples_details);
 
-void httpPeople_add(HttpClient *client);
-void httpPeople_addForm(HttpClient *client);
-void httpPeople_search(HttpClient *client);
+  // Assets
+  web_assets("/(.*)$", "public/");
+  web_assets("/favicon.ico$", "public/imgs/favicon/favicon.ico");
 
-#endif
+  // Redirect
+  web_redirect("/favicon.ico$", "public/imgs/favicon/favicon.ico");
+
+  return web_start();
+}

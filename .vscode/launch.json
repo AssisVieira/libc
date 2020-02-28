@@ -5,6 +5,30 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "(gdb) web:example",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bazel-bin/web/example/example",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [
+        {
+          "name":"DB_STRING_CONNECTION",
+          "value": "host=127.0.0.1 port=5433 user=assis password=assis dbname=assis sslmode=require"
+        }
+      ],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "Habilitar a reformatação automática para gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
       "name": "(gdb) assets:test",
       "type": "cppdbg",
       "request": "launch",

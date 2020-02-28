@@ -35,6 +35,7 @@ typedef struct Server {
   Vetor *clients;
   size_t numClients;
   ServerParams params;
+  bool close;
 } Server;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -57,7 +58,6 @@ static thread_local Server server;
 
 // static void server_freeClient(Client *client);
 static Client *server_newClient();
-static void server_closeClient(int clientFd);
 static void server_read(Client *client);
 static void server_write(Client *client);
 static void server_onClientEvent(void *arg, int fd, IOEvent events);
@@ -123,7 +123,7 @@ static void server_onListenEvent(void *arg, int fd, IOEvent events) {
   if (events & IO_ERROR) {
     log_erro("server",
              "Unknown error on the listen socket. Stoping server...\n");
-    server_stop(-1);
+    server_stop(EXIT_FAILURE);
     return;
   }
 
@@ -147,21 +147,21 @@ static void server_acceptClients() {
         break;
       } else {
         log_erro("server", "tcp_accept(): %d - %s\n", errno, strerror(errno));
-        return;
+        continue;
       }
     }
 
     if (setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &FLAG_TCP_NODELAY,
                    sizeof(FLAG_TCP_NODELAY))) {
-      log_erro("server", "setsockopt(TCP_NODELAY): %d - %s\n", errno,
-               strerror(errno));
-      return;
+      log_erro("server", "client %d >>> setsockopt(TCP_NODELAY): %d - %s\n",
+               clientFd, errno, strerror(errno));
+      continue;
     }
 
     server.numClients++;
 
-    log_dbug("server", "Connection accepted [%d/%d]: %d.\n", server.numClients,
-             server.params.maxClients, clientFd);
+    log_dbug("server", "client %d >>> connection accepted [%d/%d].\n", clientFd,
+             server.numClients, server.params.maxClients);
 
     Client *client = vetor_item(server.clients, clientFd);
 
@@ -169,8 +169,10 @@ static void server_acceptClients() {
       client = server_newClient();
 
       if (client == NULL) {
-        server_closeClient(clientFd);
-        return;
+        log_erro("server", "client %d >>> server_newClient() is NULL.\n",
+                 clientFd);
+        server_close(clientFd);
+        break;
       }
 
       vetor_inserir(server.clients, clientFd, client);
@@ -189,8 +191,15 @@ static void server_acceptClients() {
     if (io_add(client->fd, IO_READ | IO_EDGE_TRIGGERED, NULL,
                server_onClientEvent)) {
       log_erro("server", "io_add(): %d - %s.\n", errno, strerror(errno));
-      server_closeClient(clientFd);
+      server_close(clientFd);
       continue;
+    }
+  }
+
+  if (server.close) {
+    log_info("server", "Close listen socket: %d.\n", server.fd);
+    if (close(server.fd)) {
+      log_erro("server", "close(): %d - %s.\n", errno, strerror(errno));
     }
   }
 }
@@ -204,7 +213,7 @@ void server_send(int clientFd, const void *buff, size_t size) {
 
   if (buff_writer_write(writer, buff, size) != size) {
     log_erro("server", "buff_writer_write()\n");
-    server_closeClient(clientFd);
+    server_close(clientFd);
     return;
   }
 
@@ -236,14 +245,14 @@ static void server_onClientEvent(void *arg, int fd, IOEvent events) {
 
   if (events & IO_CLOSED) {
     log_dbug("server", "client %d - closed.\n", client->fd);
-    server_closeClient(client->fd);
+    server_close(client->fd);
     return;
   }
 
   if (events & IO_ERROR) {
     log_erro("server", "client %d - unknown error. Closing client...\n",
              client->fd);
-    server_closeClient(client->fd);
+    server_close(client->fd);
     return;
   }
 
@@ -288,7 +297,7 @@ static void server_write(Client *client) {
       if (io_mod(client->fd, IO_READ | IO_WRITE | IO_EDGE_TRIGGERED, NULL,
                  server_onClientEvent)) {
         log_erro("server", "io_mod(): %d - %s.\n", errno, strerror(errno));
-        server_closeClient(client->fd);
+        server_close(client->fd);
         return;
       }
       break;
@@ -301,7 +310,7 @@ static void server_write(Client *client) {
     log_erro("server", "client %d <<< error: %d - %s.\n", client->fd, errno,
              strerror(errno));
 
-    server_closeClient(client->fd);
+    server_close(client->fd);
 
     return;
   }
@@ -309,7 +318,7 @@ static void server_write(Client *client) {
   if (client->readClosed) {
     log_dbug("server", "client %d <<< no more reading or writing, closing.\n",
              client->fd);
-    server_closeClient(client->fd);
+    server_close(client->fd);
     return;
   }
 }
@@ -341,7 +350,7 @@ static void server_read(Client *client) {
       } else {
         log_erro("server", "client %d >>> error: %d - %s\n", client->fd, errno,
                  strerror(errno));
-        server_closeClient(client->fd);
+        server_close(client->fd);
         return;
       }
     }
@@ -352,7 +361,7 @@ static void server_read(Client *client) {
       if (!client->busy && buff_isempty(&client->outbox) &&
           buff_isempty(&client->inbox)) {
         log_dbug("server", "client %d >>> no tasks, closing...\n", client->fd);
-        server_closeClient(client->fd);
+        server_close(client->fd);
         return;
       }
       break;
@@ -394,14 +403,14 @@ static void server_processInbox(Client *client) {
       break;
     case FORMAT_ERROR:
       log_erro("server", "client %d >>> onReceive() fail.\n", client->fd);
-      server_closeClient(client->fd);
+      server_close(client->fd);
       break;
   }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void server_closeClient(int clientFd) {
+void server_close(int clientFd) {
   server.numClients--;
 
   if (close(clientFd)) {
@@ -452,4 +461,8 @@ static Client *server_newClient() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void server_stop(int result) { io_close(result); }
+void server_stop(int result) {
+  log_info("server", "Stoping...\n");
+  server.close = true;
+  io_close(result);
+}

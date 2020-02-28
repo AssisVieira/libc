@@ -14,43 +14,15 @@
  *   limitations under the License.
  ******************************************************************************/
 
-#ifndef PEOPLE_H
-#define PEOPLE_H
+#ifndef WEB_PEOPLES_H
+#define WEB_PEOPLES_H
 
-#include "db/db.h"
-#include <stddef.h>
+#include "http/http.h"
 
-#define PEOPLE_SEARCH_MAX_PEOPLES 25
-
-typedef struct People {
-  char name[128];
-  char email[128];
-  char id[32];
-} People;
-
-typedef enum PeopleStatus {
-  PEOPLE_OK = 0,
-  PEOPLE_QUERY_EMPTY,
-  PEOPLE_ERROR,
-} PeopleStatus;
-
-typedef struct PeopleSearchSig PeopleSearchSig;
-
-typedef void (*PeopleSearchCb)(PeopleSearchSig *sig, PeopleStatus status);
-
-struct PeopleSearchSig {
-  const char *query;
-  int page;
-  int pageSize;
-  DB *db;
-  PeopleSearchCb callback;
-  void *ctx;
-  struct {
-    int peopleLen;
-    People peoples[PEOPLE_SEARCH_MAX_PEOPLES];
-  } resp;
-};
-
-void people_search(PeopleSearchSig *sig);
+void webPeoples_add(HttpClient *client);
+void webPeoples_list(HttpClient *client);
+void webPeoples_remove(HttpClient *client);
+void webPeoples_update(HttpClient *client);
+void webPeoples_details(HttpClient *client);
 
 #endif
