@@ -29,7 +29,8 @@
     "ostream": "c",
     "ratio": "c",
     "db.h": "c",
-    "threads.h": "c"
+    "threads.h": "c",
+    "log.h": "c"
   },
   "files.exclude": {
     "**/bazel-*": true,

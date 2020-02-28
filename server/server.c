@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,6 +21,7 @@
 #include "buff/buff.h"
 #include "io/io.h"
 #include "log/log.h"
+#include "str/str.h"
 #include "vetor/vetor.h"
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -42,7 +44,7 @@ typedef struct Server {
 
 typedef struct Client {
   int fd;
-  Buff outbox;
+  str_t *outbox;
   bool canWrite;
   Buff inbox;
   bool busy;
@@ -56,18 +58,39 @@ static thread_local Server server;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// static void server_freeClient(Client *client);
-static Client *server_newClient();
+static Client *server_newClient(int fd);
+static Client *server_client(int fd);
 static void server_read(Client *client);
 static void server_write(Client *client);
 static void server_onClientEvent(void *arg, int fd, IOEvent events);
 static void server_acceptClients();
 static void server_onListenEvent(void *arg, int fd, IOEvent events);
 static void server_processInbox(Client *client);
+static int server_setupSigTermHandler();
+static void server_sigTermHandler(int signum, siginfo_t *info, void *ptr);
+static int server_init(ServerParams params);
+static void server_free();
+static void server_freeClient(Client *client);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 int server_start(ServerParams params) {
+  if (server_init(params)) return -1;
+
+  int r = io_run(10);
+
+  server_free();
+
+  log_info("server", "Bye!\n");
+
+  return r;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int server_init(ServerParams params) {
+  log_info("server", "Initializing...\n");
+
   server.params = params;
   server.fd = -1;
   server.canAccept = false;
@@ -96,19 +119,56 @@ int server_start(ServerParams params) {
 
   if (listen(server.fd, 10)) goto error;
 
-  log_info("server", "Concorrência máxima: %d\n", params.maxClients);
-  log_info("server", "Aguardando conexões na porta: %d.\n", params.port);
+  log_info("server", "Concurrency max: %d\n", params.maxClients);
+  log_info("server", "Waiting for connections on port: %d.\n", params.port);
 
   if (io_add(server.fd, IO_READ | IO_EDGE_TRIGGERED, NULL,
              server_onListenEvent)) {
     goto error;
   }
 
-  return io_run(10);
+  if (server_setupSigTermHandler()) goto error;
+
+  return 0;
 
 error:
   if (server.fd != -1) close(server.fd);
   return -1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void server_free() {
+  for (int i = 0; i < vetor_qtd(server.clients); i++) {
+    Client *client = vetor_item(server.clients, i);
+    server_freeClient(client);
+    vetor_inserir(server.clients, i, NULL);
+  }
+  vetor_destruir(server.clients);
+  server.clients = NULL;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int server_setupSigTermHandler() {
+  static struct sigaction _sigact;
+
+  memset(&_sigact, 0, sizeof(_sigact));
+  _sigact.sa_sigaction = server_sigTermHandler;
+  _sigact.sa_flags = SA_SIGINFO;
+
+  if (sigaction(SIGTERM, &_sigact, NULL)) {
+    log_erro("server", "sigaction(): %d - %s\n", errno, strerror(errno));
+    return -1;
+  }
+
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void server_sigTermHandler(int signum, siginfo_t *info, void *ptr) {
+  server_stop(0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -163,30 +223,17 @@ static void server_acceptClients() {
     log_dbug("server", "client %d >>> connection accepted [%d/%d].\n", clientFd,
              server.numClients, server.params.maxClients);
 
-    Client *client = vetor_item(server.clients, clientFd);
+    Client *client = server_newClient(clientFd);
 
     if (client == NULL) {
-      client = server_newClient();
-
-      if (client == NULL) {
-        log_erro("server", "client %d >>> server_newClient() is NULL.\n",
-                 clientFd);
-        server_close(clientFd);
-        break;
-      }
-
-      vetor_inserir(server.clients, clientFd, client);
+      log_erro("server", "client %d >>> server_newClient()\n", clientFd);
+      server_close(clientFd);
+      break;
     }
 
-    client->fd = clientFd;
-    client->canRead = false;
-    client->readClosed = false;
-    client->canWrite = true;
-    client->busy = false;
-    buff_clear(&client->inbox);
-    buff_clear(&client->outbox);
-
     server.params.onConnected(client->fd);
+
+    server.params.onClean(client->fd);
 
     if (io_add(client->fd, IO_READ | IO_EDGE_TRIGGERED, NULL,
                server_onClientEvent)) {
@@ -206,28 +253,82 @@ static void server_acceptClients() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static Client *server_newClient(int fd) {
+  Client *client = vetor_item(server.clients, fd);
+
+  if (client == NULL) {
+    client = malloc(sizeof(Client));
+
+    if (client == NULL) {
+      log_erro("server", "malloc(): %d - %s\n", errno, strerror(errno));
+      return NULL;
+    }
+
+    if (buff_init(&client->inbox, server.params.inboxMaxSize)) {
+      log_erro("server", "buff_init()\n");
+      free(client);
+      return NULL;
+    }
+
+    if ((client->outbox = str_new(server.params.outboxInitSize)) == NULL) {
+      log_erro("server", "str_new()\n");
+      buff_free(&client->inbox);
+      free(client);
+      return NULL;
+    }
+
+    vetor_inserir(server.clients, fd, client);
+  }
+
+  client->fd = fd;
+  client->canRead = false;
+  client->readClosed = false;
+  client->canWrite = true;
+  client->busy = false;
+  buff_clear(&client->inbox);
+  str_clear(client->outbox);
+
+  return client;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void server_freeClient(Client *client) {
+  if (client == NULL) return;
+  buff_free(&client->inbox);
+  str_free(&client->outbox);
+  free(client);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static Client *server_client(int fd) { return vetor_item(server.clients, fd); }
+
+////////////////////////////////////////////////////////////////////////////////
+
 void server_send(int clientFd, const void *buff, size_t size) {
-  Client *client = vetor_item(server.clients, clientFd);
+  Client *client = server_client(clientFd);
 
-  BuffWriter *writer = buff_writer(&client->outbox);
-
-  if (buff_writer_write(writer, buff, size) != size) {
-    log_erro("server", "buff_writer_write()\n");
+  if (str_addcstrlen(&client->outbox, buff, size)) {
+    log_erro("server", "str_addcstrlen()\n");
     server_close(clientFd);
     return;
   }
 
   server_write(client);
+}
 
-  if (!client->busy) {
-    server_processInbox(client);
-  }
+////////////////////////////////////////////////////////////////////////////////
+
+static void server_onFlush(Client *client) {
+  server.params.onClean(client->fd);
+  server_processInbox(client);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static void server_onClientEvent(void *arg, int fd, IOEvent events) {
-  Client *client = vetor_item(server.clients, fd);
+  Client *client = server_client(fd);
 
   if (events & IO_READ) {
     log_dbug("server", "client %d >>> can read.\n", client->fd);
@@ -263,9 +364,6 @@ static void server_onClientEvent(void *arg, int fd, IOEvent events) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void server_write(Client *client) {
-  struct iovec *iovec = NULL;
-  size_t iovecCount = 0;
-
   if (!client->canWrite) {
     log_dbug("server",
              "client %d >>> outbox is busy, waiting for the write signal.\n",
@@ -273,18 +371,16 @@ static void server_write(Client *client) {
     return;
   }
 
-  BuffReader *reader = buff_reader(&client->outbox);
-
   while (true) {
-    buff_reader_iovec(reader, &iovec, &iovecCount, false);
-
-    ssize_t nwritten = writev(client->fd, iovec, iovecCount);
+    ssize_t nwritten =
+        write(client->fd, str_cstr(client->outbox), str_len(client->outbox));
 
     if (nwritten >= 0) {
-      buff_reader_commit(reader, nwritten);
+      str_rm(client->outbox, 0, nwritten);
       log_dbug("server", "client %d <<< (%d bytes)\n", client->fd, nwritten);
-      if (buff_reader_isempty(reader)) {
+      if (str_len(client->outbox) == 0) {
         client->busy = false;
+        server_onFlush(client);
         break;
       } else {
         continue;
@@ -358,7 +454,7 @@ static void server_read(Client *client) {
     if (r == 0) {
       log_dbug("server", "client %d >>> read closed\n", client->fd);
       client->readClosed = true;
-      if (!client->busy && buff_isempty(&client->outbox) &&
+      if (!client->busy && str_len(client->outbox) == 0 &&
           buff_isempty(&client->inbox)) {
         log_dbug("server", "client %d >>> no tasks, closing...\n", client->fd);
         server_close(client->fd);
@@ -424,40 +520,6 @@ void server_close(int clientFd) {
 
   server_acceptClients();
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-static Client *server_newClient() {
-  Client *client = malloc(sizeof(Client));
-
-  if (client == NULL) {
-    log_erro("server", "malloc(): %d - %s\n", errno, strerror(errno));
-    return NULL;
-  }
-
-  if (buff_init(&client->inbox, server.params.inboxMaxSize)) {
-    log_erro("server", "buff_init()\n");
-    free(client);
-    return NULL;
-  }
-
-  if (buff_init(&client->outbox, server.params.inboxMaxSize)) {
-    log_erro("server", "buff_init()\n");
-    buff_free(&client->inbox);
-    free(client);
-    return NULL;
-  }
-
-  return client;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// static void server_freeClient(Client *client) {
-//   buff_free(&client->inbox);
-//   buff_free(&client->outbox);
-//   free(client);
-// }
 
 ////////////////////////////////////////////////////////////////////////////////
 

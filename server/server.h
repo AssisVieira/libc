@@ -15,6 +15,8 @@ typedef void (*ServerOnDisconnected)(int client);
 
 typedef void (*ServerOnMessage)(int client);
 
+typedef void (*ServerOnClean)(int client);
+
 typedef FormatStatus (*ServerOnFormat)(int client, BuffReader *reader);
 
 typedef struct ServerParams {
@@ -22,10 +24,12 @@ typedef struct ServerParams {
   char *host;
   int maxClients;
   int inboxMaxSize;
+  int outboxInitSize;
   ServerOnFormat onFormat;
   ServerOnMessage onMessage;
   ServerOnConnected onConnected;
   ServerOnDisconnected onDisconnected;
+  ServerOnClean onClean;
 } ServerParams;
 
 int server_start(ServerParams params);

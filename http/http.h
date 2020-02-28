@@ -32,6 +32,8 @@
 
 #define HTTP_RESP_INIT_SIZE (4 * 1024)
 
+#define HTTP_CLIENTS_INIT_SIZE 32
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #define PARAM_NAME_MAX 128
@@ -46,6 +48,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 #define INBOX_MAX_SIZE (4 * 1024)
+#define OUTBOX_INIT_SIZE (4 * 1024)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -89,7 +92,7 @@ typedef void (*HttpHandlerFunc)(int clientFd);
 // STARTUP FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_start(int port, size_t maxClients);
+int http_start(int port, int maxClients);
 
 int http_handler(const char *method, const char *path, HttpHandlerFunc func);
 

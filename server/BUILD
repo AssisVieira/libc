@@ -29,6 +29,7 @@ cc_library(
         "//io",
         "//buff",
         "//log",
+        "//str"
     ],
 )
 

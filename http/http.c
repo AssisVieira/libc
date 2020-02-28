@@ -109,10 +109,7 @@ typedef struct HttpServer {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static thread_local HttpServer server = {
-    .clients = NULL,
-    .handlersLen = 0,
-};
+static thread_local HttpServer *http = NULL;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -153,6 +150,7 @@ static FormatStatus http_onFormat(int clientFd, BuffReader *reader);
 static void http_onMessage(int clientFd);
 static void http_onDisconnected(int clientFd);
 static void http_onConnected(int clientFd);
+static void http_onClean(int clientFd);
 static int http_dispatch(HttpClient *client);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -173,19 +171,17 @@ static HttpClient *http_client(int clientFd);
 static HttpReq *http_newReq();
 static void http_freeReq(HttpReq *req);
 static void http_clearReq(HttpReq *req);
+static int http_init();
+static void http_free();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_start(int port, size_t maxClients) {
+int http_start(int port, int maxClients) {
   int r = 0;
 
   // Startup...
 
-  log_info("http", "Inicializando...\n");
-
-  server.clients = vetor_criar(maxClients);
-
-  if (server.clients == NULL) {
+  if (http_init()) {
     return -1;
   }
 
@@ -193,11 +189,13 @@ int http_start(int port, size_t maxClients) {
   params.host = "127.0.0.1";
   params.port = port;
   params.inboxMaxSize = INBOX_MAX_SIZE;
+  params.outboxInitSize = OUTBOX_INIT_SIZE;
   params.maxClients = maxClients;
   params.onConnected = http_onConnected;
   params.onFormat = http_onFormat;
   params.onMessage = http_onMessage;
   params.onDisconnected = http_onDisconnected;
+  params.onClean = http_onClean;
 
   // Execution...
 
@@ -205,26 +203,55 @@ int http_start(int port, size_t maxClients) {
 
   // Shutdown...
 
-  for (size_t i = 0; i < vetor_qtd(server.clients); i++) {
-    HttpClient *client = vetor_item(server.clients, i);
-    http_freeClient(client);
-  }
-
-  vetor_destruir(server.clients);
-  server.clients = NULL;
-
-  for (int i = 0; i < server.handlersLen; i++) {
-    regfree(&server.handlers[i].pattern);
-  }
-
-  log_dbug("http", "Tchau!\n");
+  http_free();
 
   return r;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static int http_init() {
+  if (http != NULL) return 0;
+
+  http = malloc(sizeof(HttpServer));
+
+  if (http == NULL) {
+    return -1;
+  }
+
+  http->clients = vetor_criar(HTTP_CLIENTS_INIT_SIZE);
+
+  if (http->clients == NULL) {
+    return -1;
+  }
+
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void http_free() {
+  for (size_t i = 0; i < vetor_qtd(http->clients); i++) {
+    HttpClient *client = vetor_item(http->clients, i);
+    http_freeClient(client);
+  }
+
+  vetor_destruir(http->clients);
+  http->clients = NULL;
+
+  for (int i = 0; i < http->handlersLen; i++) {
+    regfree(&http->handlers[i].pattern);
+  }
+
+  free(http);
+
+  http = NULL;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 static void http_freeClient(HttpClient *client) {
+  if (client == NULL) return;
   http_freeReq(client->req);
   str_free(&client->resp);
   free(client);
@@ -233,11 +260,15 @@ static void http_freeClient(HttpClient *client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int http_handler(const char *method, const char *path, HttpHandlerFunc func) {
-  HttpHandler *handler = &server.handlers[server.handlersLen++];
+  if (http_init()) {
+    return -1;
+  }
+
+  HttpHandler *handler = &http->handlers[http->handlersLen++];
 
   if (regcomp(&handler->pattern, path, REG_EXTENDED)) {
     log_erro("http", "Erro ao compilar expressão regular: %s.\n", path);
-    server.handlersLen--;
+    http->handlersLen--;
     return -1;
   }
 
@@ -267,6 +298,14 @@ static void http_onConnected(int clientFd) {
     return;
   }
 
+  log_dbug("http", "Client connected: %d\n", clientFd);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void http_onClean(int clientFd) {
+  HttpClient *client = http_client(clientFd);
+
   http_clearClient(client);
 
   log_dbug("http", "Client connected: %d\n", clientFd);
@@ -288,10 +327,10 @@ static void http_clearClient(HttpClient *client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static HttpClient *http_client(int clientFd) {
-  HttpClient *client = vetor_item(server.clients, clientFd);
+  HttpClient *client = vetor_item(http->clients, clientFd);
   if (client == NULL) {
     client = http_newClient(clientFd);
-    vetor_inserir(server.clients, clientFd, client);
+    vetor_inserir(http->clients, clientFd, client);
   }
   return client;
 }
@@ -336,17 +375,18 @@ static int http_dispatch(HttpClient *client) {
   const HttpHandler *matchedHandler = NULL;
   regmatch_t args[ARGS_MAX];
 
-  for (int i = 0; i < server.handlersLen; i++) {
-    HttpHandler *handler = &server.handlers[i];
+  for (int i = 0; i < http->handlersLen; i++) {
+    HttpHandler *handler = &http->handlers[i];
 
     if (strcmp(handler->method, http_reqMethod(client->fd)) == 0 &&
-        regexec(&handler->pattern, http_reqPath(client->fd), ARGS_MAX, args, 0) ==
-            0) {
+        regexec(&handler->pattern, http_reqPath(client->fd), ARGS_MAX, args,
+                0) == 0) {
       for (size_t i = 1; i < ARGS_MAX && args[i].rm_so != -1; i++) {
         client->req->argsLen++;
         client->req->args[i - 1][0] = '\0';
 
-        strncat(client->req->args[i - 1], http_reqPath(client->fd) + args[i].rm_so,
+        strncat(client->req->args[i - 1],
+                http_reqPath(client->fd) + args[i].rm_so,
                 http_min(ARG_MAX - 1, args[i].rm_eo - args[i].rm_so));
 
         log_dbug("http", "Argumento: %s\n", client->req->args[i - 1]);
@@ -412,7 +452,7 @@ static void http_clearReq(HttpReq *req) {
 
 static FormatStatus http_onFormat(int clientFd, BuffReader *reader) {
   HttpClient *client = http_client(clientFd);
-  const char *c;
+  const char *c = NULL;
   size_t r;
 
   while ((r = buff_reader_read(reader, &c, 1)) > 0) {
@@ -951,14 +991,14 @@ static FormatStatus stateBody(HttpClient *client, char c) {
 
 void http_sendNotFound(int clientFd) {
   http_sendStatus(clientFd, HTTP_STATUS_NOT_FOUND);
-  http_send(clientFd, NULL);
+  http_send(clientFd, str_null());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void http_sendError(int clientFd) {
   http_sendStatus(clientFd, HTTP_STATUS_INTERNAL_ERROR);
-  http_send(clientFd, NULL);
+  http_send(clientFd, str_null());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -994,12 +1034,12 @@ void http_sendHeaderInt(int clientFd, const char *name, int value) {
 void http_send(int clientFd, const str_t *body) {
   HttpClient *client = http_client(clientFd);
 
-  if (body == NULL || body == str_null()) {
+  if (body == NULL) {
     http_sendHeader(clientFd, "Content-Length", "0");
-    str_addcstr(&client->resp, "\r\n\r\n");
+    str_addcstr(&client->resp, "\r\n");
   } else {
     http_sendHeaderInt(clientFd, "Content-Length", str_len(body));
-    str_addcstr(&client->resp, "\r\n\r\n");
+    str_addcstr(&client->resp, "\r\n");
     str_add(&client->resp, body);
   }
 
