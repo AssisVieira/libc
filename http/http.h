@@ -18,7 +18,6 @@
 #define HTTP_H
 
 #include <stddef.h>
-#include "str/str.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -44,6 +43,7 @@
 
 #define URI_MAX 256
 #define METHOD_MAX 8
+#define PATTERN_MAX URI_MAX
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -82,6 +82,7 @@ typedef enum HttpStatus {
   HTTP_STATUS_NOT_FOUND = 404,
   HTTP_STATUS_BAD_REQUEST = 400,
   HTTP_STATUS_INTERNAL_ERROR = 500,
+  HTTP_STATUS_MOVED_PERMANENTLY = 301,
 } HttpStatus;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -110,6 +111,8 @@ const char *http_reqMethod(int clientFd);
 
 const char *http_reqPath(int clientFd);
 
+const char *http_reqPattern(int clientFd);
+
 const char *http_reqArg(int clientFd, int n);
 
 const char *http_reqBody(int clientFd);
@@ -122,6 +125,8 @@ void http_sendNotFound(int clientFd);
 
 void http_sendError(int clientFd);
 
+void http_sendRedirect(int clientFd, const char *url);
+
 void http_sendStatus(int clientFd, HttpStatus status);
 
 void http_sendType(int clientFd, HttpMimeType mimeType);
@@ -130,6 +135,6 @@ void http_sendHeader(int clientFd, const char *nome, const char *valor);
 
 void http_sendHeaderInt(int clientFd, const char *nome, int valor);
 
-void http_send(int clientFd, const str_t *body);
+void http_send(int clientFd, const char *body, size_t size);
 
 #endif

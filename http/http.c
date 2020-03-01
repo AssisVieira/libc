@@ -81,6 +81,9 @@ typedef struct HttpReq {
   int bodyLen;
 
   int contentLength;
+
+  // Transient, pattern used to route the request.
+  const char *pattern;
 } HttpReq;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -95,6 +98,7 @@ struct HttpClient {
 
 typedef struct HttpHandler {
   regex_t pattern;
+  char patternRaw[PATTERN_MAX];
   char method[METHOD_MAX];
   HttpHandlerFunc func;
 } HttpHandler;
@@ -259,18 +263,21 @@ static void http_freeClient(HttpClient *client) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_handler(const char *method, const char *path, HttpHandlerFunc func) {
+int http_handler(const char *method, const char *pattern,
+                 HttpHandlerFunc func) {
   if (http_init()) {
     return -1;
   }
 
   HttpHandler *handler = &http->handlers[http->handlersLen++];
 
-  if (regcomp(&handler->pattern, path, REG_EXTENDED)) {
-    log_erro("http", "Erro ao compilar expressão regular: %s.\n", path);
+  if (regcomp(&handler->pattern, pattern, REG_EXTENDED)) {
+    log_erro("http", "Erro ao compilar expressão regular: %s.\n", pattern);
     http->handlersLen--;
     return -1;
   }
+
+  strncpy(handler->patternRaw, pattern, PATTERN_MAX);
 
   handler->func = func;
 
@@ -381,6 +388,8 @@ static int http_dispatch(HttpClient *client) {
     if (strcmp(handler->method, http_reqMethod(client->fd)) == 0 &&
         regexec(&handler->pattern, http_reqPath(client->fd), ARGS_MAX, args,
                 0) == 0) {
+      client->req->pattern = handler->patternRaw;
+
       for (size_t i = 1; i < ARGS_MAX && args[i].rm_so != -1; i++) {
         client->req->argsLen++;
         client->req->args[i - 1][0] = '\0';
@@ -991,14 +1000,22 @@ static FormatStatus stateBody(HttpClient *client, char c) {
 
 void http_sendNotFound(int clientFd) {
   http_sendStatus(clientFd, HTTP_STATUS_NOT_FOUND);
-  http_send(clientFd, str_null());
+  http_send(clientFd, NULL, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void http_sendError(int clientFd) {
   http_sendStatus(clientFd, HTTP_STATUS_INTERNAL_ERROR);
-  http_send(clientFd, str_null());
+  http_send(clientFd, NULL, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void http_sendRedirect(int clientFd, const char *url) {
+  http_sendStatus(clientFd, HTTP_STATUS_MOVED_PERMANENTLY);
+  http_sendHeader(clientFd, "Location", url);
+  http_send(clientFd, NULL, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1031,16 +1048,16 @@ void http_sendHeaderInt(int clientFd, const char *name, int value) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_send(int clientFd, const str_t *body) {
+void http_send(int clientFd, const char *body, size_t size) {
   HttpClient *client = http_client(clientFd);
 
-  if (body == NULL) {
+  if (body == NULL || size == 0) {
     http_sendHeader(clientFd, "Content-Length", "0");
     str_addcstr(&client->resp, "\r\n");
   } else {
-    http_sendHeaderInt(clientFd, "Content-Length", str_len(body));
+    http_sendHeaderInt(clientFd, "Content-Length", size);
     str_addcstr(&client->resp, "\r\n");
-    str_add(&client->resp, body);
+    str_addcstrlen(&client->resp, body, size);
   }
 
   log_dbug("http", "<<< %s\n", str_cstr(client->resp));
@@ -1060,6 +1077,8 @@ static const char *http_strStatus(HttpStatus status) {
       return "Bad Request";
     case HTTP_STATUS_INTERNAL_ERROR:
       return "Internal Error";
+    case HTTP_STATUS_MOVED_PERMANENTLY:
+      return "Moved Permanently";
   }
   return NULL;
 }
@@ -1122,6 +1141,13 @@ const char *http_reqMethod(int clientFd) {
 const char *http_reqPath(int clientFd) {
   HttpClient *client = http_client(clientFd);
   return client->req->uri;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+const char *http_reqPattern(int clientFd) {
+  HttpClient *client = http_client(clientFd);
+  return client->req->pattern;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
