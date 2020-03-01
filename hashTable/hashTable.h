@@ -26,7 +26,7 @@ typedef struct HashTableIt {
  * objeto.
  *
  * @param  modulo altura da tabela hash;
- * @return instancia da tabela ou NULL, caso não há memória suficiente.
+ * @return 0, em caso de sucesso, -1, em caso de erro.
  */
 int hashTable_init(HashTable *hashTable, size_t module);
 
