@@ -77,6 +77,7 @@ void db_clear(DB *db);
  * @param value valor do parâmetro.
  */
 void db_param(DB *db, const char *value);
+void db_paramInt(DB *db, int value);
 
 /**
  * Envia o comando sql para o banco de dados. Esta função deve ser sempre

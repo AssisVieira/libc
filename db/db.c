@@ -193,7 +193,20 @@ void db_sql(DB *db, const char *sql) {
 
 void db_param(DB *db, const char *value) {
   if (db == NULL) return;
-  db->params[db->paramsLen++] = value;
+  size_t size = strlen(value) + 1;
+  char *buff = malloc(size);
+  memcpy(buff, value, size);
+  db->params[db->paramsLen++] = buff;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void db_paramInt(DB *db, int value) {
+  if (db == NULL) return;
+  size_t size = 32;
+  char *buff = malloc(size);
+  snprintf(buff, size, "%d", value);
+  db->params[db->paramsLen++] = buff;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -210,7 +223,13 @@ void db_clear(DB *db) {
     db->result = PQgetResult(db->conn);
   }
   db->sql = NULL;
+
+  for (int i = 0; i < db->paramsLen; i++) {
+    free((void *)db->params[i]);
+  }
+
   db->paramsLen = 0;
+
   db->onCmdResult = NULL;
 }
 
