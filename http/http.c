@@ -18,6 +18,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 #include <regex.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -1127,6 +1128,23 @@ const char *http_reqParam(int clientFd, const char *name) {
     }
   }
   return "";
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int http_reqParamInt(int clientFd, const char *name, int def) {
+  HttpClient *client = http_client(clientFd);
+  for (int i = 0; i < client->req->paramsLen; i++) {
+    if (strcmp(client->req->params[i].name, name) == 0) {
+      int r = strtol(client->req->params[i].value, NULL, 10);
+      if ((r == LONG_MAX || r == LONG_MIN) && errno == ERANGE) {
+        return def;
+      } else {
+        return r;
+      }
+    }
+  }
+  return def;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -107,6 +107,8 @@ const char *http_reqHeader(int clientFd, const char *name);
 
 const char *http_reqParam(int clientFd, const char *name);
 
+int http_reqParamInt(int clientFd, const char *name, int def);
+
 const char *http_reqMethod(int clientFd);
 
 const char *http_reqPath(int clientFd);
