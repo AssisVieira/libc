@@ -23,30 +23,24 @@ typedef struct File {
 ////////////////////////////////////////////////////////////////////////////////
 
 typedef struct Assets {
-  char dir[PATH_MAX];
   HashTable files;
 } Assets;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static Assets assets = {
-    .dir = {0},
-};
+static Assets assets = {};
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static int assets_addFile(const char *path);
 static int assets_addDir(const char *dirPath);
 static bool assets_isFile(const char *path);
-static bool assets_isDir(const char *path);
 static char *assets_makePath(char *path, size_t pathSize, const char *dirPath,
                              const char *filename);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 int assets_open(const char *dirPath) {
-  strncat(assets.dir, dirPath, PATH_MAX-1);
-
   if (hashTable_init(&assets.files, 100)) {
     log_erro("assets", "hashTable_init(): %d - %s\n", errno, strerror(errno));
     goto error;
@@ -82,6 +76,12 @@ size_t assets_size(const char *path) {
     return -1;
   }
   return file->size;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool assets_exists(const char *path) {
+  return hashTable_contains(&assets.files, path);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -247,7 +247,7 @@ static bool assets_isFile(const char *path) {
   return false;
 }
 
-static bool assets_isDir(const char *path) {
+bool assets_isDir(const char *path) {
   struct stat st_buf;
   int status = stat(path, &st_buf);
 

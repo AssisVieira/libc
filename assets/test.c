@@ -16,6 +16,11 @@ int main() {
   assert(assets_size("assets/example/imgs/image-1.jpg") == 101267);
   assert(assets_size("assets/example/imgs/image-2.jpg") == 50582);
 
+  assert(assets_exists("assets/example/index.html") == true);
+
+  assert(assets_isDir("assets/example/index.html") == false);
+  assert(assets_isDir("assets/example/") == true);
+
   assets_close();
 
   return 0;
