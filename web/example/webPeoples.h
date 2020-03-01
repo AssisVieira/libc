@@ -19,10 +19,10 @@
 
 #include "http/http.h"
 
-void webPeoples_add(HttpClient *client);
-void webPeoples_list(HttpClient *client);
-void webPeoples_remove(HttpClient *client);
-void webPeoples_update(HttpClient *client);
-void webPeoples_details(HttpClient *client);
+void webPeoples_add(int client);
+void webPeoples_list(int client);
+void webPeoples_remove(int client);
+void webPeoples_update(int client);
+void webPeoples_details(int client);
 
 #endif

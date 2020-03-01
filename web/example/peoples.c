@@ -25,20 +25,20 @@
 
 static void onPeoplesListResp(DB *db) {
   PeoplesListSig *sig = db_context(db);
+  PeoplesStatus status = PEOPLES_ERROR;
 
-  if (db_error(db)) {
-    return sig->callback(sig, PEOPLES_ERROR);
+  if (!db_error(db)) {
+    status = PEOPLES_OK;
+    sig->resp.peopleLen = db_count(db);
+    for (int i = 0; i < db_count(db); i++) {
+      strcpy(sig->resp.peoples[i].id, db_value(db, i, 0));
+      strcpy(sig->resp.peoples[i].name, db_value(db, i, 1));
+      strcpy(sig->resp.peoples[i].email, db_value(db, i, 2));
+    }
   }
 
-  sig->resp.peopleLen = db_count(db);
-
-  for (int i = 0; i < db_count(db); i++) {
-    strcpy(sig->resp.peoples[i].id, db_value(db, i, 0));
-    strcpy(sig->resp.peoples[i].name, db_value(db, i, 1));
-    strcpy(sig->resp.peoples[i].email, db_value(db, i, 2));
-  }
-
-  return sig->callback(sig, PEOPLES_OK);
+  db_close(db);
+  return sig->callback(sig, status);
 }
 
 void peoples_list(PeoplesListSig *sig) {
@@ -50,25 +50,29 @@ void peoples_list(PeoplesListSig *sig) {
     sig->pageSize = 10;
   }
 
-  db_sql(sig->db,
+  DB *db = db_open();
+
+  db_sql(db,
          "select id, name, email from people where name ilike '%' || "
          "$1::text || '%' OR email ilike '%' || $1::text || '%'");
 
-  db_param(sig->db, sig->query);
+  db_param(db, sig->query);
 
-  db_send(sig->db, sig, onPeoplesListResp);
+  db_send(db, sig, onPeoplesListResp);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesAddResp(DB *db) {
   PeoplesAddSig *sig = db_context(db);
+  PeoplesStatus status = PEOPLES_ERROR;
 
-  if (db_error(db)) {
-    return sig->callback(sig, PEOPLES_ERROR);
+  if (!db_error(db)) {
+    status = PEOPLES_OK;
   }
 
-  return sig->callback(sig, PEOPLES_OK);
+  db_close(db);
+  return sig->callback(sig, status);
 }
 
 void peoples_add(PeoplesAddSig *sig) {
@@ -80,23 +84,25 @@ void peoples_add(PeoplesAddSig *sig) {
     return sig->callback(sig, PEOPLES_EMAIL_EMPTY);
   }
 
-  db_sql(sig->db,
-         "insert into people (name, email) values ($1::text, $2::text)");
-  db_param(sig->db, sig->name);
-  db_param(sig->db, sig->email);
-  db_send(sig->db, sig, onPeoplesAddResp);
+  DB *db = db_open();
+  db_sql(db, "insert into people (name, email) values ($1::text, $2::text)");
+  db_param(db, sig->name);
+  db_param(db, sig->email);
+  db_send(db, sig, onPeoplesAddResp);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesUpdateResp(DB *db) {
   PeoplesUpdateSig *sig = db_context(db);
+  PeoplesStatus status = PEOPLES_ERROR;
 
-  if (db_error(db)) {
-    return sig->callback(sig, PEOPLES_ERROR);
+  if (!db_error(db)) {
+    status = PEOPLES_OK;
   }
 
-  return sig->callback(sig, PEOPLES_OK);
+  db_close(db);
+  return sig->callback(sig, status);
 }
 
 void peoples_update(PeoplesUpdateSig *sig) {
@@ -112,25 +118,29 @@ void peoples_update(PeoplesUpdateSig *sig) {
     return sig->callback(sig, PEOPLES_EMAIL_EMPTY);
   }
 
+  DB *db = db_open();
+
   db_sql(
-      sig->db,
+      db,
       "update people name = $1::text, email = $2::text where id = $3::bigint");
-  db_param(sig->db, sig->name);
-  db_param(sig->db, sig->email);
-  db_param(sig->db, sig->id);
-  db_send(sig->db, sig, onPeoplesUpdateResp);
+  db_param(db, sig->name);
+  db_param(db, sig->email);
+  db_param(db, sig->id);
+  db_send(db, sig, onPeoplesUpdateResp);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesRemoveResp(DB *db) {
   PeoplesRemoveSig *sig = db_context(db);
+  PeoplesStatus status = PEOPLES_ERROR;
 
-  if (db_error(db)) {
-    return sig->callback(sig, PEOPLES_ERROR);
+  if (!db_error(db)) {
+    status = PEOPLES_OK;
   }
 
-  return sig->callback(sig, PEOPLES_OK);
+  db_close(db);
+  return sig->callback(sig, status);
 }
 
 void peoples_remove(PeoplesRemoveSig *sig) {
@@ -138,29 +148,28 @@ void peoples_remove(PeoplesRemoveSig *sig) {
     return sig->callback(sig, PEOPLES_ID_EMPTY);
   }
 
-  db_sql(sig->db, "delete people where id = $1::bigint");
-  db_param(sig->db, sig->id);
-  db_send(sig->db, sig, onPeoplesRemoveResp);
+  DB *db = db_open();
+
+  db_sql(db, "delete people where id = $1::bigint");
+  db_param(db, sig->id);
+  db_send(db, sig, onPeoplesRemoveResp);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesDetailsResp(DB *db) {
   PeoplesDetailsSig *sig = db_context(db);
+  PeoplesStatus status = PEOPLES_ERROR;
 
-  if (db_error(db)) {
-    return sig->callback(sig, PEOPLES_ERROR);
+  if (!db_error(db) && db_count(db) == 1) {
+    status = PEOPLES_OK;
+    strcpy(sig->resp.id, db_value(db, 0, 0));
+    strcpy(sig->resp.name, db_value(db, 0, 1));
+    strcpy(sig->resp.email, db_value(db, 0, 2));
   }
 
-  if (db_count(db) != 1) {
-    return sig->callback(sig, PEOPLES_ERROR);
-  }
-
-  strcpy(sig->resp.id, db_value(db, 0, 0));
-  strcpy(sig->resp.name, db_value(db, 0, 1));
-  strcpy(sig->resp.email, db_value(db, 0, 2));
-
-  return sig->callback(sig, PEOPLES_OK);
+  db_close(db);
+  return sig->callback(sig, status);
 }
 
 void peoples_details(PeoplesDetailsSig *sig) {
@@ -168,9 +177,11 @@ void peoples_details(PeoplesDetailsSig *sig) {
     return sig->callback(sig, PEOPLES_ID_EMPTY);
   }
 
-  db_sql(sig->db, "select id, name, email from people where id = $1::bigint");
-  db_param(sig->db, sig->id);
-  db_send(sig->db, sig, onPeoplesDetailsResp);
+  DB *db = db_open();
+
+  db_sql(db, "select id, name, email from people where id = $1::bigint");
+  db_param(db, sig->id);
+  db_send(db, sig, onPeoplesDetailsResp);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

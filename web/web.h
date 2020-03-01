@@ -17,15 +17,13 @@
 #ifndef WEB_H
 #define WEB_H
 
-#include "http/http.h"
-
-typedef void (*WebHandler)(HttpClient *client);
+typedef void (*WebHandler)(int client);
 
 void web_handler(const char *method, const char *path, WebHandler handler);
 
-int web_start();
+int web_start(int port, int maxClients);
 
-void web_close(int result);
+void web_stop(int result);
 
 void web_assets(const char *from, const char *to);
 

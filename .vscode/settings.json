@@ -30,7 +30,8 @@
     "ratio": "c",
     "db.h": "c",
     "threads.h": "c",
-    "log.h": "c"
+    "log.h": "c",
+    "hashtable.h": "c"
   },
   "files.exclude": {
     "**/bazel-*": true,

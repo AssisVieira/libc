@@ -17,8 +17,8 @@
 #include "webPeoples.h"
 
 #include <stdlib.h>
+#include <string.h>
 
-#include "db/db.h"
 #include "log/log.h"
 #include "peoples.h"
 #include "str/str.h"
@@ -26,38 +26,41 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesListResp(PeoplesListSig *sig, PeoplesStatus status) {
-  HttpClient *client = sig->ctx;
-  str_t *body = http_respBody(client);
+  int client = sig->client;
+  str_t *body = str_new(10000);
 
   if (status == PEOPLES_OK) {
-    str_fmt(&body, "{\"status\": \"%d\", \"peoples\": [", status);
+    str_fmt(body, "{\"status\": \"%d\", \"peoples\": [", status);
 
     for (int i = 0; i < sig->resp.peopleLen; i++) {
-      str_fmt(&body, "{\"id\": \"%s\", \"name\": \"%s\", \"email\": \"%s\"}%c",
+      str_fmt(body, "{\"id\": \"%s\", \"name\": \"%s\", \"email\": \"%s\"}%s",
               sig->resp.peoples[i].id, sig->resp.peoples[i].name,
               sig->resp.peoples[i].email,
-              (i + 1 == sig->resp.peopleLen) ? ' ' : ',');
+              (i + 1 == sig->resp.peopleLen) ? "" : ", ");
     }
 
+    str_fmt(body, "]}");
+
   } else {
-    str_fmt(&body, "{\"status\": \"%d\"}", status);
+    str_fmt(body, "{\"status\": \"%d\"}", status);
   }
 
-  http_respSend(client, body);
+  http_sendStatus(client, HTTP_STATUS_OK);
+  http_sendType(client, HTTP_TYPE_JSON);
+  http_send(client, str_cstr(body), str_len(body));
 
-  db_close(sig->db);
+  str_free(&body);
 
   free(sig);
 }
 
-void webPeoples_list(HttpClient *client) {
+void webPeoples_list(int client) {
   PeoplesListSig *sig = malloc(sizeof(PeoplesListSig));
   sig->query = http_reqParam(client, "q");
   sig->page = 0;
   sig->pageSize = 10;
   sig->callback = onPeoplesListResp;
-  sig->ctx = client;
-  sig->db = db_open();
+  sig->client = client;
 
   peoples_list(sig);
 }
@@ -65,25 +68,28 @@ void webPeoples_list(HttpClient *client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesAddResp(PeoplesAddSig *sig, PeoplesStatus status) {
-  HttpClient *client = sig->ctx;
+  int client = sig->client;
 
   if (status == PEOPLES_OK) {
-    http_respOk(client, HTTP_TYPE_JSON, "{\"status\": \"ok\"}");
+    http_sendStatus(client, HTTP_STATUS_OK);
+    http_sendType(client, HTTP_TYPE_JSON);
+    http_send(client, "{\"status\": \"ok\"}", strlen("{\"status\": \"ok\"}"));
   } else {
-    http_respOk(client, HTTP_TYPE_JSON, "{\"status\": \"error\"}");
+    http_sendStatus(client, HTTP_STATUS_OK);
+    http_sendType(client, HTTP_TYPE_JSON);
+    http_send(client, "{\"status\": \"error\"}",
+              strlen("{\"status\": \"error\"}"));
   }
 
-  db_close(sig->db);
   free(sig);
 }
 
-void webPeoples_add(HttpClient *client) {
+void webPeoples_add(int client) {
   PeoplesAddSig *sig = malloc(sizeof(PeoplesAddSig));
-  sig->name = http_reqBodyString(client, "name");
-  sig->email = http_reqBodyString(client, "email");
+  sig->name = http_reqParam(client, "name");
+  sig->email = http_reqParam(client, "email");
   sig->callback = onPeoplesAddResp;
-  sig->ctx = client;
-  sig->db = db_open();
+  sig->client = client;
 
   log_info("web-peoples", "body = %s\n", http_reqBody(client));
 
@@ -93,24 +99,27 @@ void webPeoples_add(HttpClient *client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesRemoveResp(PeoplesRemoveSig *sig, PeoplesStatus status) {
-  HttpClient *client = sig->ctx;
+  int client = sig->client;
 
   if (status == PEOPLES_OK) {
-    http_respOk(client, HTTP_TYPE_JSON, "{\"status\": \"ok\"}");
+    http_sendStatus(client, HTTP_STATUS_OK);
+    http_sendType(client, HTTP_TYPE_JSON);
+    http_send(client, "{\"status\": \"ok\"}", strlen("{\"status\": \"ok\"}"));
   } else {
-    http_respOk(client, HTTP_TYPE_JSON, "{\"status\": \"error\"}");
+    http_sendStatus(client, HTTP_STATUS_OK);
+    http_sendType(client, HTTP_TYPE_JSON);
+    http_send(client, "{\"status\": \"error\"}",
+              strlen("{\"status\": \"error\"}"));
   }
 
-  db_close(sig->db);
   free(sig);
 }
 
-void webPeoples_remove(HttpClient *client) {
+void webPeoples_remove(int client) {
   PeoplesRemoveSig *sig = malloc(sizeof(PeoplesRemoveSig));
   sig->id = http_reqParam(client, "id");
   sig->callback = onPeoplesRemoveResp;
-  sig->ctx = client;
-  sig->db = db_open();
+  sig->client = client;
 
   peoples_remove(sig);
 }
@@ -118,26 +127,29 @@ void webPeoples_remove(HttpClient *client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesUpdateResp(PeoplesUpdateSig *sig, PeoplesStatus status) {
-  HttpClient *client = sig->ctx;
+  int client = sig->client;
 
   if (status == PEOPLES_OK) {
-    http_respOk(client, HTTP_TYPE_JSON, "{\"status\": \"ok\"}");
+    http_sendStatus(client, HTTP_STATUS_OK);
+    http_sendType(client, HTTP_TYPE_JSON);
+    http_send(client, "{\"status\": \"ok\"}", strlen("{\"status\": \"ok\"}"));
   } else {
-    http_respOk(client, HTTP_TYPE_JSON, "{\"status\": \"error\"}");
+    http_sendStatus(client, HTTP_STATUS_OK);
+    http_sendType(client, HTTP_TYPE_JSON);
+    http_send(client, "{\"status\": \"error\"}",
+              strlen("{\"status\": \"error\"}"));
   }
 
-  db_close(sig->db);
   free(sig);
 }
 
-void webPeoples_update(HttpClient *client) {
+void webPeoples_update(int client) {
   PeoplesUpdateSig *sig = malloc(sizeof(PeoplesUpdateSig));
-  sig->id = http_reqJsonLong(client, "id");
-  sig->name = http_reqJsonString(client, "name");
-  sig->email = http_reqJsonString(client, "email");
+  sig->id = http_reqParam(client, "id");
+  sig->name = http_reqParam(client, "name");
+  sig->email = http_reqParam(client, "email");
   sig->callback = onPeoplesUpdateResp;
-  sig->ctx = client;
-  sig->db = db_open();
+  sig->client = client;
 
   peoples_update(sig);
 }
@@ -145,35 +157,33 @@ void webPeoples_update(HttpClient *client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesDetailsResp(PeoplesDetailsSig *sig, PeoplesStatus status) {
-  HttpClient *client = sig->ctx;
+  int client = sig->client;
 
   if (status == PEOPLES_OK) {
     str_t *body = str_new(1000);
 
-    str_fmt(&body,
+    str_fmt(body,
             "{\"status\": \"%s\", \"people\": {\"id\": \"%s\", \"name\": "
             "\"%s\", \"email\": \"%s\"}}",
             "ok", sig->resp.id, sig->resp.name, sig->resp.email);
 
-    http_respBegin(client, HTTP_STATUS_OK, HTTP_TYPE_JSON);
-    http_respBody(client, str_cstr(body), str_len(body));
-    http_respEnd();
+    http_sendStatus(client, HTTP_STATUS_OK);
+    http_sendType(client, HTTP_TYPE_JSON);
+    http_send(client, str_cstr(body), str_len(body));
 
     str_free(&body);
   } else {
-    http_respError(client);
+    http_sendError(client);
   }
 
-  db_close(sig->db);
   free(sig);
 }
 
-void webPeoples_details(HttpClient *client) {
+void webPeoples_details(int client) {
   PeoplesDetailsSig *sig = malloc(sizeof(PeoplesDetailsSig));
   sig->id = http_reqArg(client, 0);
   sig->callback = onPeoplesDetailsResp;
-  sig->ctx = client;
-  sig->db = db_open();
+  sig->client = client;
 
   peoples_details(sig);
 }

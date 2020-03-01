@@ -44,9 +44,8 @@ struct PeoplesListSig {
   const char *query;
   int page;
   int pageSize;
-  DB *db;
   PeoplesListCb callback;
-  void *ctx;
+  int client;
   struct {
     int peopleLen;
     People peoples[PEOPLES_LIST_MAX_PEOPLES];
@@ -58,9 +57,8 @@ typedef void (*PeoplesAddCb)(PeoplesAddSig *sig, PeoplesStatus status);
 struct PeoplesAddSig {
   const char *name;
   const char *email;
-  DB *db;
   PeoplesAddCb callback;
-  void *ctx;
+  int client;
   struct {
   } resp;
 };
@@ -69,9 +67,8 @@ typedef struct PeoplesRemoveSig PeoplesRemoveSig;
 typedef void (*PeoplesRemoveCb)(PeoplesRemoveSig *sig, PeoplesStatus status);
 struct PeoplesRemoveSig {
   const char *id;
-  DB *db;
   PeoplesRemoveCb callback;
-  void *ctx;
+  int client;
   struct {
   } resp;
 };
@@ -82,9 +79,8 @@ struct PeoplesUpdateSig {
   const char *id;
   const char *name;
   const char *email;
-  DB *db;
   PeoplesUpdateCb callback;
-  void *ctx;
+  int client;
   struct {
   } resp;
 };
@@ -93,9 +89,8 @@ typedef struct PeoplesDetailsSig PeoplesDetailsSig;
 typedef void (*PeoplesDetailsCb)(PeoplesDetailsSig *sig, PeoplesStatus status);
 struct PeoplesDetailsSig {
   const char *id;
-  DB *db;
   PeoplesDetailsCb callback;
-  void *ctx;
+  int client;
   People resp;
 };
 

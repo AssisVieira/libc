@@ -24,13 +24,11 @@ int main() {
   web_handler("DELETE", "/peoples/(.*)$", webPeoples_remove);
   web_handler("PUT", "/peoples/(.*)$", webPeoples_update);
   web_handler("GET", "/peoples/(.*)$", webPeoples_details);
+  web_redirect("/$", "/peoples");
 
   // Assets
-  web_assets("/(.*)$", "public/");
-  web_assets("/favicon.ico$", "public/imgs/favicon/favicon.ico");
+  web_assets("(/.*)$", "web/example/public/");
+  web_redirect("/favicon.ico$", "/imgs/favicon/favicon.ico");
 
-  // Redirect
-  web_redirect("/favicon.ico$", "public/imgs/favicon/favicon.ico");
-
-  return web_start();
+  return web_start(2000, 1000);
 }
