@@ -17,6 +17,8 @@
 #ifndef DB_H
 #define DB_H
 
+#include <stdbool.h>
+
 #include "io/io.h"
 
 #define DB_SQL_PARAMS_MAX 32

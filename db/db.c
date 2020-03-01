@@ -15,18 +15,19 @@
  ******************************************************************************/
 
 #include "db.h"
-#include "log/log.h"
+
 #include <postgresql/libpq-fe.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "log/log.h"
+
 ////////////////////////////////////////////////////////////////////////////////
 
-static void db_onConnect(void *instancia, int fd, IOEventType event);
-static void db_onQueryResult(void *context, int fd, IOEventType event);
-static void db_onSocketError(void *context, int fd, IOEventType event);
+static void db_onEventConnect(void *instancia, int fd, IOEvent event);
+static void db_onEventQuery(void *context, int fd, IOEvent event);
 static void db_destroy(DB *db);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -122,28 +123,10 @@ int db_openPool(int min, int max) {
       return -1;
     }
 
-    if (ioevent_install(PQsocket(db->conn), false)) {
-      log_erro("db", "Erro ao abrir conexão no slot %d: ioevent_install().\n",
-               i);
-      db_destroy(db);
-      return -1;
-    }
-
-    if (ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_ERROR, db,
-                       db_onSocketError)) {
+    if (io_add(PQsocket(db->conn), IO_WRITE, db, db_onEventConnect)) {
       log_erro("db",
                "Erro ao abrir conexão no slot %d: "
-               "ioevent_listen(IOEVENT_TYPE_ERROR).\n",
-               i);
-      db_destroy(db);
-      return -1;
-    }
-
-    if (ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_WRITE, db,
-                       db_onConnect)) {
-      log_erro("db",
-               "Erro ao abrir conexão no slot %d: "
-               "ioevent_listen(IOEVENT_TYPE_WRITE).\n",
+               "io_listen(IO_ERROR).\n",
                i);
       db_destroy(db);
       return -1;
@@ -201,8 +184,7 @@ DB *db_open() {
 ////////////////////////////////////////////////////////////////////////////////
 
 void db_sql(DB *db, const char *sql) {
-  if (db == NULL)
-    return;
+  if (db == NULL) return;
   db_clear(db);
   db->sql = sql;
 }
@@ -210,22 +192,19 @@ void db_sql(DB *db, const char *sql) {
 ////////////////////////////////////////////////////////////////////////////////
 
 void db_param(DB *db, const char *value) {
-  if (db == NULL)
-    return;
+  if (db == NULL) return;
   db->params[db->paramsLen++] = value;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 void *db_context(DB *db) {
-  if (db == NULL)
-    return NULL;
+  if (db == NULL) return NULL;
   return db->context;
 }
 
 void db_clear(DB *db) {
-  if (db == NULL)
-    return;
+  if (db == NULL) return;
   while (db->result != NULL) {
     PQclear(db->result);
     db->result = PQgetResult(db->conn);
@@ -238,8 +217,7 @@ void db_clear(DB *db) {
 ////////////////////////////////////////////////////////////////////////////////
 
 void db_close(DB *db) {
-  if (db == NULL)
-    return;
+  if (db == NULL) return;
 
   db_clear(db);
 
@@ -274,8 +252,7 @@ void db_close(DB *db) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void db_destroy(DB *db) {
-  if (db == NULL)
-    return;
+  if (db == NULL) return;
 
   db_clear(db);
   PQfinish(db->conn);
@@ -291,8 +268,7 @@ static void db_destroy(DB *db) {
 ////////////////////////////////////////////////////////////////////////////////
 
 void db_send(DB *db, void *context, onDBCallback onCmdResult) {
-  if (db == NULL)
-    return;
+  if (db == NULL) return;
 
   db->onCmdResult = onCmdResult;
   db->context = context;
@@ -310,22 +286,20 @@ void db_send(DB *db, void *context, onDBCallback onCmdResult) {
 ////////////////////////////////////////////////////////////////////////////////
 
 int db_count(DB *db) {
-  if (db == NULL)
-    return -1;
+  if (db == NULL) return -1;
   return PQntuples(db->result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 const char *db_value(DB *db, int row, int col) {
-  if (db == NULL)
-    return NULL;
+  if (db == NULL) return NULL;
   return PQgetvalue(db->result, row, col);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void db_onQueryResult(void *context, int fd, IOEventType event) {
+static void db_onEventQuery(void *context, int fd, IOEvent event) {
   DB *db = context;
   (void)fd;
   (void)event;
@@ -368,34 +342,23 @@ bool db_error(DB *db) { return (db == NULL || db->error); }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void db_onSocketError(void *context, int fd, IOEventType event) {
-  // DB *db = context;
-  log_erro("db", "Erro ao abrir conexão: db_onSocketError(fd = %d).\n", fd);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-static void db_onConnect(void *context, int fd, IOEventType event) {
+static void db_onEventConnect(void *context, int fd, IOEvent event) {
   DB *db = context;
   (void)fd;
-  (void)event;
+
+  if (event & IO_ERROR) {
+    // DB *db = context;
+    log_erro("db", "Erro ao abrir conexão: db_onSocketError(fd = %d).\n", fd);
+    db_destroy(db);
+    return;
+  }
 
   int polling = PQconnectPoll(db->conn);
 
   if (polling == PGRES_POLLING_READING) {
     log_dbug("db", "PQconnectPoll() : PGRES_POLLING_READING\n");
 
-    if (ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_READ, db,
-                       db_onConnect)) {
-
-      log_erro("db",
-               "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = %d).\n",
-               fd, polling);
-      db_destroy(db);
-      return;
-    }
-
-    if (ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_WRITE)) {
+    if (io_mod(PQsocket(db->conn), IO_READ, db, db_onEventConnect)) {
       log_erro("db",
                "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = %d).\n",
                fd, polling);
@@ -409,16 +372,7 @@ static void db_onConnect(void *context, int fd, IOEventType event) {
   if (polling == PGRES_POLLING_WRITING) {
     log_dbug("db", "PQconnectPoll() : PGRES_POLLING_WRITING\n");
 
-    if (ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_WRITE, db,
-                       db_onConnect)) {
-      log_erro("db",
-               "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = %d).\n",
-               fd, polling);
-      db_destroy(db);
-      return;
-    }
-
-    if (ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_READ)) {
+    if (io_mod(PQsocket(db->conn), IO_WRITE, db, db_onEventConnect)) {
       log_erro("db",
                "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = %d).\n",
                fd, polling);
@@ -433,26 +387,7 @@ static void db_onConnect(void *context, int fd, IOEventType event) {
     log_dbug("db", "PQconnectPoll() : PGRES_POLLING_OK\n");
     log_dbug("db", "PQstatus() : %d\n", PQstatus(db->conn));
 
-    if (ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_READ)) {
-      log_erro("db",
-               "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = "
-               "PGRES_POLLING_OK).\n",
-               fd);
-      db_destroy(db);
-      return;
-    }
-
-    if (ioevent_nolisten(PQsocket(db->conn), IOEVENT_TYPE_WRITE)) {
-      log_erro("db",
-               "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = "
-               "PGRES_POLLING_OK).\n",
-               fd);
-      db_destroy(db);
-      return;
-    }
-
-    if (ioevent_listen(PQsocket(db->conn), IOEVENT_TYPE_READ, db,
-                       db_onQueryResult)) {
+    if (io_mod(PQsocket(db->conn), IO_READ, db, db_onEventQuery)) {
       log_erro("db",
                "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = "
                "PGRES_POLLING_OK).\n",
