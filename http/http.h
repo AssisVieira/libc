@@ -61,6 +61,10 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define HTTP_WORKERS 4
+
+////////////////////////////////////////////////////////////////////////////////
+
 typedef struct HttpClient HttpClient;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,7 +91,7 @@ typedef enum HttpStatus {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef void (*HttpHandlerFunc)(int clientFd);
+typedef void (*HttpHandlerFunc)(HttpClient *client);
 
 ////////////////////////////////////////////////////////////////////////////////
 // STARTUP FUNCTIONS
@@ -103,40 +107,40 @@ void http_stop(int result);
 // REQUEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *http_reqHeader(int clientFd, const char *name);
+const char *http_reqHeader(HttpClient *client, const char *name);
 
-const char *http_reqParam(int clientFd, const char *name);
+const char *http_reqParam(HttpClient *client, const char *name);
 
-int http_reqParamInt(int clientFd, const char *name, int def);
+int http_reqParamInt(HttpClient *client, const char *name, int def);
 
-const char *http_reqMethod(int clientFd);
+const char *http_reqMethod(HttpClient *client);
 
-const char *http_reqPath(int clientFd);
+const char *http_reqPath(HttpClient *client);
 
-const char *http_reqPattern(int clientFd);
+const char *http_reqPattern(HttpClient *client);
 
-const char *http_reqArg(int clientFd, int n);
+const char *http_reqArg(HttpClient *client, int n);
 
-const char *http_reqBody(int clientFd);
+const char *http_reqBody(HttpClient *client);
 
 ////////////////////////////////////////////////////////////////////////////////
 // RESPONSE FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_sendNotFound(int clientFd);
+void http_sendNotFound(HttpClient *client);
 
-void http_sendError(int clientFd);
+void http_sendError(HttpClient *client);
 
-void http_sendRedirect(int clientFd, const char *url);
+void http_sendRedirect(HttpClient *client, const char *url);
 
-void http_sendStatus(int clientFd, HttpStatus status);
+void http_sendStatus(HttpClient *client, HttpStatus status);
 
-void http_sendType(int clientFd, HttpMimeType mimeType);
+void http_sendType(HttpClient *client, HttpMimeType mimeType);
 
-void http_sendHeader(int clientFd, const char *nome, const char *valor);
+void http_sendHeader(HttpClient *client, const char *nome, const char *valor);
 
-void http_sendHeaderInt(int clientFd, const char *nome, int valor);
+void http_sendHeaderInt(HttpClient *client, const char *nome, int valor);
 
-void http_send(int clientFd, const char *body, size_t size);
+void http_send(HttpClient *client, const char *body, size_t size);
 
 #endif

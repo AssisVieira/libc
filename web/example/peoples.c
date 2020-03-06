@@ -23,7 +23,36 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void onPeoplesListResp(DB *db) {
+static void peoples_listOnResp(DB *db);
+
+void peoples_list(PeoplesListSig *sig) {
+  if (sig->page < 0) {
+    sig->page = 0;
+  }
+
+  if (sig->pageSize < 10) {
+    sig->pageSize = 10;
+  }
+
+  if (sig->pageSize > PEOPLES_LIST_MAX_PEOPLES) {
+    sig->pageSize = PEOPLES_LIST_MAX_PEOPLES;
+  }
+
+  DB *db = db_open();
+
+  db_sql(db,
+         "select id, name, email from people where name ilike '%' || "
+         "$1 || '%' OR email ilike '%' || $1 || '%' OFFSET $2 "
+         "LIMIT $3");
+
+  db_param(db, sig->query);
+  db_paramInt(db, sig->page * sig->pageSize);
+  db_paramInt(db, sig->pageSize);
+
+  db_send(db, sig, peoples_listOnResp);
+}
+
+static void peoples_listOnResp(DB *db) {
   PeoplesListSig *sig = db_context(db);
   PeoplesStatus status = PEOPLES_ERROR;
 
@@ -39,26 +68,6 @@ static void onPeoplesListResp(DB *db) {
 
   db_close(db);
   return sig->callback(sig, status);
-}
-
-void peoples_list(PeoplesListSig *sig) {
-  if (sig->page < 0) {
-    sig->page = 0;
-  }
-
-  if (sig->pageSize < 10) {
-    sig->pageSize = 10;
-  }
-
-  DB *db = db_open();
-
-  db_sql(db,
-         "select id, name, email from people where name ilike '%' || "
-         "$1::text || '%' OR email ilike '%' || $1::text || '%'");
-
-  db_param(db, sig->query);
-
-  db_send(db, sig, onPeoplesListResp);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

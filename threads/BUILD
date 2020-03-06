@@ -14,32 +14,17 @@
 #   limitations under the License.
 ################################################################################
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
-    name = "http",
-    srcs = glob(
-        [
-            "*.c",
-            "*.h",
-        ],
-        exclude = ["*_test.c"],
-    ),
-    hdrs = ["http.h"],
-    linkopts = ["-lrt"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "//buff",
-        "//log",
-        "//server",
-        "//vetor",
-        "//str"        
+    name = "threads",
+    srcs = [
+        "thpool.c",
+        "thpool.h",
     ],
-)
-
-cc_binary(
-    name = "test",
-    srcs = ["test.c"],
+    hdrs = ["thpool.h"],
     visibility = ["//visibility:public"],
-    deps = [":http", "//log"],
+    linkopts = ["-pthread"],
+    deps = [
+    ],
 )

@@ -31,7 +31,15 @@
     "db.h": "c",
     "threads.h": "c",
     "log.h": "c",
-    "hashtable.h": "c"
+    "hashtable.h": "c",
+    "libpq-fe.h": "c",
+    "pqcomm.h": "c",
+    "postgres_ext.h": "c",
+    "pg_config.h": "c",
+    "c.h": "c",
+    "stdint.h": "c",
+    "string.h": "c",
+    "cstdint": "c"
   },
   "files.exclude": {
     "**/bazel-*": true,

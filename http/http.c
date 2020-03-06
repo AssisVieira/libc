@@ -114,7 +114,7 @@ typedef struct HttpServer {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static thread_local HttpServer *http = NULL;
+static HttpServer *http = NULL;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -221,12 +221,14 @@ static int http_init() {
   http = malloc(sizeof(HttpServer));
 
   if (http == NULL) {
+    free(http);
     return -1;
   }
 
   http->clients = vetor_criar(HTTP_CLIENTS_INIT_SIZE);
 
   if (http->clients == NULL) {
+    free(http);
     return -1;
   }
 
@@ -364,11 +366,11 @@ static HttpClient *http_newClient(int clientFd) {
 static void http_onMessage(int clientFd) {
   HttpClient *client = http_client(clientFd);
 
-  log_info("http", "%s %s\n", http_reqMethod(clientFd), http_reqPath(clientFd));
+  log_info("http", "%s %s\n", http_reqMethod(client), http_reqPath(client));
 
   if (http_dispatch(client)) {
-    log_dbug("http", "Recurso não encontrado: %s.\n", http_reqPath(clientFd));
-    http_sendNotFound(clientFd);
+    log_dbug("http", "Recurso não encontrado: %s.\n", http_reqPath(client));
+    http_sendNotFound(client);
     return;
   }
 }
@@ -386,17 +388,16 @@ static int http_dispatch(HttpClient *client) {
   for (int i = 0; i < http->handlersLen; i++) {
     HttpHandler *handler = &http->handlers[i];
 
-    if (strcmp(handler->method, http_reqMethod(client->fd)) == 0 &&
-        regexec(&handler->pattern, http_reqPath(client->fd), ARGS_MAX, args,
-                0) == 0) {
+    if (strcmp(handler->method, http_reqMethod(client)) == 0 &&
+        regexec(&handler->pattern, http_reqPath(client), ARGS_MAX, args, 0) ==
+            0) {
       client->req->pattern = handler->patternRaw;
 
       for (size_t i = 1; i < ARGS_MAX && args[i].rm_so != -1; i++) {
         client->req->argsLen++;
         client->req->args[i - 1][0] = '\0';
 
-        strncat(client->req->args[i - 1],
-                http_reqPath(client->fd) + args[i].rm_so,
+        strncat(client->req->args[i - 1], http_reqPath(client) + args[i].rm_so,
                 http_min(ARG_MAX - 1, args[i].rm_eo - args[i].rm_so));
 
         log_dbug("http", "Argumento: %s\n", client->req->args[i - 1]);
@@ -412,7 +413,7 @@ static int http_dispatch(HttpClient *client) {
     return -1;
   }
 
-  matchedHandler->func(client->fd);
+  matchedHandler->func(client);
 
   return 0;
 }
@@ -957,7 +958,7 @@ static FormatStatus stateNovaLinha2(HttpClient *client, char c) {
 
 static FormatStatus stateNovaLinha3(HttpClient *client, char c) {
   if (c == '\n') {
-    const char *contentLength = http_reqHeader(client->fd, "Content-Length");
+    const char *contentLength = http_reqHeader(client, "Content-Length");
 
     if (contentLength != NULL) {
       client->req->contentLength = atoi(contentLength);
@@ -999,71 +1000,65 @@ static FormatStatus stateBody(HttpClient *client, char c) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_sendNotFound(int clientFd) {
-  http_sendStatus(clientFd, HTTP_STATUS_NOT_FOUND);
-  http_send(clientFd, NULL, 0);
+void http_sendNotFound(HttpClient *client) {
+  http_sendStatus(client, HTTP_STATUS_NOT_FOUND);
+  http_send(client, NULL, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_sendError(int clientFd) {
-  http_sendStatus(clientFd, HTTP_STATUS_INTERNAL_ERROR);
-  http_send(clientFd, NULL, 0);
+void http_sendError(HttpClient *client) {
+  http_sendStatus(client, HTTP_STATUS_INTERNAL_ERROR);
+  http_send(client, NULL, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_sendRedirect(int clientFd, const char *url) {
-  http_sendStatus(clientFd, HTTP_STATUS_MOVED_PERMANENTLY);
-  http_sendHeader(clientFd, "Location", url);
-  http_send(clientFd, NULL, 0);
+void http_sendRedirect(HttpClient *client, const char *url) {
+  http_sendStatus(client, HTTP_STATUS_MOVED_PERMANENTLY);
+  http_sendHeader(client, "Location", url);
+  http_send(client, NULL, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_sendStatus(int clientFd, HttpStatus status) {
-  HttpClient *client = http_client(clientFd);
+void http_sendStatus(HttpClient *client, HttpStatus status) {
   str_fmt(client->resp, "HTTP/1.1 %d %s\r\n", status, http_strStatus(status));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_sendType(int clientFd, HttpMimeType type) {
-  HttpClient *client = http_client(clientFd);
+void http_sendType(HttpClient *client, HttpMimeType type) {
   str_fmt(client->resp, "Content-Type: %s\r\n", http_strMimeType(type));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_sendHeader(int clientFd, const char *name, const char *value) {
-  HttpClient *client = http_client(clientFd);
+void http_sendHeader(HttpClient *client, const char *name, const char *value) {
   str_fmt(client->resp, "%s: %s\r\n", name, value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_sendHeaderInt(int clientFd, const char *name, int value) {
-  HttpClient *client = http_client(clientFd);
+void http_sendHeaderInt(HttpClient *client, const char *name, int value) {
   str_fmt(client->resp, "%s: %d\r\n", name, value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void http_send(int clientFd, const char *body, size_t size) {
-  HttpClient *client = http_client(clientFd);
-
+void http_send(HttpClient *client, const char *body, size_t size) {
   if (body == NULL || size == 0) {
-    http_sendHeader(clientFd, "Content-Length", "0");
+    http_sendHeader(client, "Content-Length", "0");
     str_addcstr(&client->resp, "\r\n");
   } else {
-    http_sendHeaderInt(clientFd, "Content-Length", size);
+    http_sendHeaderInt(client, "Content-Length", size);
     str_addcstr(&client->resp, "\r\n");
     str_addcstrlen(&client->resp, body, size);
   }
 
   log_dbug("http", "<<< %s\n", str_cstr(client->resp));
 
-  server_send(clientFd, str_cstr(client->resp), str_len(client->resp));
+  server_send(client->fd, str_cstr(client->resp), str_len(client->resp));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1108,8 +1103,7 @@ static const char *http_strMimeType(HttpMimeType contentType) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *http_reqHeader(int clientFd, const char *name) {
-  HttpClient *client = http_client(clientFd);
+const char *http_reqHeader(HttpClient *client, const char *name) {
   for (int i = 0; i < client->req->headersLen; i++) {
     if (strcmp(client->req->headers[i].name, name) == 0) {
       return client->req->headers[i].value;
@@ -1120,8 +1114,7 @@ const char *http_reqHeader(int clientFd, const char *name) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *http_reqParam(int clientFd, const char *name) {
-  HttpClient *client = http_client(clientFd);
+const char *http_reqParam(HttpClient *client, const char *name) {
   for (int i = 0; i < client->req->paramsLen; i++) {
     if (strcmp(client->req->params[i].name, name) == 0) {
       return client->req->params[i].value;
@@ -1132,8 +1125,7 @@ const char *http_reqParam(int clientFd, const char *name) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int http_reqParamInt(int clientFd, const char *name, int def) {
-  HttpClient *client = http_client(clientFd);
+int http_reqParamInt(HttpClient *client, const char *name, int def) {
   for (int i = 0; i < client->req->paramsLen; i++) {
     if (strcmp(client->req->params[i].name, name) == 0) {
       int r = strtol(client->req->params[i].value, NULL, 10);
@@ -1149,29 +1141,19 @@ int http_reqParamInt(int clientFd, const char *name, int def) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *http_reqMethod(int clientFd) {
-  HttpClient *client = http_client(clientFd);
-  return client->req->method;
-}
+const char *http_reqMethod(HttpClient *client) { return client->req->method; }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *http_reqPath(int clientFd) {
-  HttpClient *client = http_client(clientFd);
-  return client->req->uri;
-}
+const char *http_reqPath(HttpClient *client) { return client->req->uri; }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *http_reqPattern(int clientFd) {
-  HttpClient *client = http_client(clientFd);
-  return client->req->pattern;
-}
+const char *http_reqPattern(HttpClient *client) { return client->req->pattern; }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *http_reqArg(int clientFd, int n) {
-  HttpClient *client = http_client(clientFd);
+const char *http_reqArg(HttpClient *client, int n) {
   if (n >= client->req->argsLen) {
     return "";
   }
@@ -1180,7 +1162,4 @@ const char *http_reqArg(int clientFd, int n) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const char *http_reqBody(int clientFd) {
-  HttpClient *client = http_client(clientFd);
-  return client->req->body;
-}
+const char *http_reqBody(HttpClient *client) { return client->req->body; }

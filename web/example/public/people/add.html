@@ -1,30 +1,33 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>Create People</title>
   <link rel="stylesheet" media="screen" href="css/main.css">
 </head>
+
 <body>
 
-<h1>Create People</h1>
+  <h1>Create People</h1>
 
-<hr>
+  <hr>
 
-<form action="/people/add" method="post">
+  <form action="/peoples" method="post">
 
-  <div>
-    Name: <br>
-    <input type="text">
-  </div>
+    <div>
+      Name: <br>
+      <input type="text" name="name">
+    </div>
 
-  <div>
-    E-mail: <br>
-    <input type="email">
-  </div>
+    <div>
+      E-mail: <br>
+      <input type="email" name="email">
+    </div>
 
-  <button type="submit">Create</button>
+    <button type="submit">Create</button>
 
-</form>
+  </form>
 
 </body>
+
 </html>

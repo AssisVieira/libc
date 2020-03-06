@@ -4,12 +4,12 @@
 #include "http.h"
 #include "log/log.h"
 
-static void handleTest(int clientFd) {
+static void handleTest(HttpClient *client) {
   const char *body = "<b>Olá</b>, Brasil!\n";
 
-  http_sendStatus(clientFd, HTTP_STATUS_OK);
-  http_sendType(clientFd, HTTP_TYPE_HTML);
-  http_send(clientFd, body, strlen(body));
+  http_sendStatus(client, HTTP_STATUS_OK);
+  http_sendType(client, HTTP_TYPE_HTML);
+  http_send(client, body, strlen(body));
 }
 
 int main() {

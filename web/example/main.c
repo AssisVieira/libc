@@ -19,16 +19,16 @@
 
 int main() {
   // Module People
-  web_handler("GET", "/peoples$", webPeoples_list);
-  web_handler("POST", "/peoples$", webPeoples_add);
-  web_handler("DELETE", "/peoples/(.*)$", webPeoples_remove);
-  web_handler("PUT", "/peoples/(.*)$", webPeoples_update);
-  web_handler("GET", "/peoples/(.*)$", webPeoples_details);
-  web_redirect("/$", "/peoples");
+  web_handler("GET", "^/peoples$", webPeoples_list);
+  web_handler("POST", "^/peoples$", webPeoples_add);
+  web_handler("DELETE", "^/peoples/(.*)$", webPeoples_remove);
+  web_handler("PUT", "^/peoples/(.*)$", webPeoples_update);
+  web_handler("GET", "^/peoples/(.*)$", webPeoples_details);
+  web_redirect("/$", "^/peoples$");
 
   // Assets
-  web_assets("(/.*)$", "web/example/public/");
-  web_redirect("/favicon.ico$", "/imgs/favicon/favicon.ico");
+  web_assets("^(/.*)$", "web/example/public/");
+  web_redirect("^/favicon.ico$", "/imgs/favicon/favicon.ico");
 
   return web_start(2000, 1000);
 }

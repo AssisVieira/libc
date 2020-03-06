@@ -17,7 +17,9 @@
 #ifndef WEB_H
 #define WEB_H
 
-typedef void (*WebHandler)(int client);
+#include "http/http.h"
+
+typedef void (*WebHandler)(HttpClient *client);
 
 void web_handler(const char *method, const char *path, WebHandler handler);
 

@@ -123,7 +123,7 @@ int db_openPool(int min, int max) {
       return -1;
     }
 
-    if (io_add(PQsocket(db->conn), IO_WRITE, db, db_onEventConnect)) {
+    if (io_add(io_current(), PQsocket(db->conn), IO_WRITE, db, db_onEventConnect)) {
       log_erro("db",
                "Erro ao abrir conexão no slot %d: "
                "io_listen(IO_ERROR).\n",
@@ -377,7 +377,7 @@ static void db_onEventConnect(void *context, int fd, IOEvent event) {
   if (polling == PGRES_POLLING_READING) {
     log_dbug("db", "PQconnectPoll() : PGRES_POLLING_READING\n");
 
-    if (io_mod(PQsocket(db->conn), IO_READ, db, db_onEventConnect)) {
+    if (io_mod(io_current(),PQsocket(db->conn), IO_READ, db, db_onEventConnect)) {
       log_erro("db",
                "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = %d).\n",
                fd, polling);
@@ -391,7 +391,7 @@ static void db_onEventConnect(void *context, int fd, IOEvent event) {
   if (polling == PGRES_POLLING_WRITING) {
     log_dbug("db", "PQconnectPoll() : PGRES_POLLING_WRITING\n");
 
-    if (io_mod(PQsocket(db->conn), IO_WRITE, db, db_onEventConnect)) {
+    if (io_mod(io_current(), PQsocket(db->conn), IO_WRITE, db, db_onEventConnect)) {
       log_erro("db",
                "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = %d).\n",
                fd, polling);
@@ -406,7 +406,7 @@ static void db_onEventConnect(void *context, int fd, IOEvent event) {
     log_dbug("db", "PQconnectPoll() : PGRES_POLLING_OK\n");
     log_dbug("db", "PQstatus() : %d\n", PQstatus(db->conn));
 
-    if (io_mod(PQsocket(db->conn), IO_READ, db, db_onEventQuery)) {
+    if (io_mod(io_current(), PQsocket(db->conn), IO_READ, db, db_onEventQuery)) {
       log_erro("db",
                "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = "
                "PGRES_POLLING_OK).\n",

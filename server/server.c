@@ -38,6 +38,9 @@ typedef struct Server {
   size_t numClients;
   ServerParams params;
   bool close;
+  IO *listen;
+  IO *workers[8];
+  thrd_t thWorkers[8];
 } Server;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -54,7 +57,7 @@ typedef struct Client {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static thread_local Server server;
+static Server server;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -71,17 +74,67 @@ static void server_sigTermHandler(int signum, siginfo_t *info, void *ptr);
 static int server_init(ServerParams params);
 static void server_free();
 static void server_freeClient(Client *client);
+static int server_worker(void *arg);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 int server_start(ServerParams params) {
   if (server_init(params)) return -1;
 
-  int r = io_run(10);
+  server.workers[0] = io_new();
+  server.workers[1] = io_new();
+  server.workers[2] = io_new();
+  server.workers[3] = io_new();
+  server.workers[4] = io_new();
+  server.workers[5] = io_new();
+  server.workers[6] = io_new();
+  server.workers[7] = io_new();
+
+  if (thrd_create(&server.thWorkers[0], server_worker, server.workers[0]))
+    return -1;
+
+  if (thrd_create(&server.thWorkers[1], server_worker, server.workers[1]))
+    return -1;
+
+  if (thrd_create(&server.thWorkers[2], server_worker, server.workers[2]))
+    return -1;
+
+  if (thrd_create(&server.thWorkers[3], server_worker, server.workers[3]))
+    return -1;
+
+  if (thrd_create(&server.thWorkers[4], server_worker, server.workers[4]))
+    return -1;
+
+  if (thrd_create(&server.thWorkers[5], server_worker, server.workers[5]))
+    return -1;
+
+  if (thrd_create(&server.thWorkers[6], server_worker, server.workers[6]))
+    return -1;
+
+  if (thrd_create(&server.thWorkers[7], server_worker, server.workers[7]))
+    return -1;
+
+  int r = io_run(server.listen, 100);
 
   server_free();
 
   log_info("server", "Bye!\n");
+
+  return r;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int server_worker(void *arg) {
+  IO *io = arg;
+  int maxClients = server.params.maxClients / 8;
+
+  log_info("server-worker", "Started: %ld, maxClients: %d\n", thrd_current(),
+           maxClients);
+
+  int r = io_run(io, maxClients);
+
+  log_info("server-worker", "Closed: %ld\n", thrd_current());
 
   return r;
 }
@@ -122,7 +175,9 @@ static int server_init(ServerParams params) {
   log_info("server", "Concurrency max: %d\n", params.maxClients);
   log_info("server", "Waiting for connections on port: %d.\n", params.port);
 
-  if (io_add(server.fd, IO_READ | IO_EDGE_TRIGGERED, NULL,
+  server.listen = io_new();
+
+  if (io_add(server.listen, server.fd, IO_READ | IO_EDGE_TRIGGERED, NULL,
              server_onListenEvent)) {
     goto error;
   }
@@ -144,8 +199,18 @@ static void server_free() {
     server_freeClient(client);
     vetor_inserir(server.clients, i, NULL);
   }
+
   vetor_destruir(server.clients);
   server.clients = NULL;
+
+  io_close(server.workers[0], 0);
+  io_close(server.workers[1], 0);
+  io_close(server.workers[2], 0);
+  io_close(server.workers[3], 0);
+  io_close(server.workers[4], 0);
+  io_close(server.workers[5], 0);
+  io_close(server.workers[6], 0);
+  io_close(server.workers[7], 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -235,7 +300,9 @@ static void server_acceptClients() {
 
     server.params.onClean(client->fd);
 
-    if (io_add(client->fd, IO_READ | IO_EDGE_TRIGGERED, NULL,
+    IO *worker = server.workers[server.numClients % 8];
+
+    if (io_add(worker, client->fd, IO_READ | IO_EDGE_TRIGGERED, NULL,
                server_onClientEvent)) {
       log_erro("server", "io_add(): %d - %s.\n", errno, strerror(errno));
       server_close(clientFd);
@@ -390,7 +457,8 @@ static void server_write(Client *client) {
     if (errno == EAGAIN) {
       log_dbug("server", "client %d <<< can't write, try again.\n", client->fd);
       client->canWrite = false;
-      if (io_mod(client->fd, IO_READ | IO_WRITE | IO_EDGE_TRIGGERED, NULL,
+      if (io_mod(io_current(), client->fd,
+                 IO_READ | IO_WRITE | IO_EDGE_TRIGGERED, NULL,
                  server_onClientEvent)) {
         log_erro("server", "io_mod(): %d - %s.\n", errno, strerror(errno));
         server_close(client->fd);
@@ -526,5 +594,5 @@ void server_close(int clientFd) {
 void server_stop(int result) {
   log_info("server", "Stoping...\n");
   server.close = true;
-  io_close(result);
+  io_close(server.listen, result);
 }

@@ -43,14 +43,20 @@ typedef enum IOEvent {
 
 typedef void (*IOListener)(void *context, int fd, IOEvent event);
 
-int io_add(int fd, IOEvent events, void *context, IOListener listener);
+typedef struct IO IO;
 
-int io_mod(int fd, IOEvent events, void *context, IOListener listener);
+IO *io_new();
 
-int io_del(int fd);
+IO *io_current();
 
-int io_run(int maxEvents);
+int io_add(IO *io, int fd, IOEvent events, void *context, IOListener listener);
 
-void io_close(int result);
+int io_mod(IO *io, int fd, IOEvent events, void *context, IOListener listener);
+
+int io_del(IO *io, int fd);
+
+int io_run(IO *io, int maxEvents);
+
+void io_close(IO *io, int result);
 
 #endif

@@ -26,7 +26,7 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesListResp(PeoplesListSig *sig, PeoplesStatus status) {
-  int client = sig->client;
+  HttpClient *client = sig->client;
   str_t *body = str_new(10000);
 
   if (status == PEOPLES_OK) {
@@ -54,11 +54,11 @@ static void onPeoplesListResp(PeoplesListSig *sig, PeoplesStatus status) {
   free(sig);
 }
 
-void webPeoples_list(int client) {
+void webPeoples_list(HttpClient *client) {
   PeoplesListSig *sig = malloc(sizeof(PeoplesListSig));
   sig->query = http_reqParam(client, "q");
-  sig->page = 0;
-  sig->pageSize = 10;
+  sig->page = http_reqParamInt(client, "p", 0);
+  sig->pageSize = http_reqParamInt(client, "ps", 10);
   sig->callback = onPeoplesListResp;
   sig->client = client;
 
@@ -68,7 +68,7 @@ void webPeoples_list(int client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesAddResp(PeoplesAddSig *sig, PeoplesStatus status) {
-  int client = sig->client;
+  HttpClient *client = sig->client;
 
   if (status == PEOPLES_OK) {
     http_sendStatus(client, HTTP_STATUS_OK);
@@ -84,7 +84,7 @@ static void onPeoplesAddResp(PeoplesAddSig *sig, PeoplesStatus status) {
   free(sig);
 }
 
-void webPeoples_add(int client) {
+void webPeoples_add(HttpClient *client) {
   PeoplesAddSig *sig = malloc(sizeof(PeoplesAddSig));
   sig->name = http_reqParam(client, "name");
   sig->email = http_reqParam(client, "email");
@@ -99,7 +99,7 @@ void webPeoples_add(int client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesRemoveResp(PeoplesRemoveSig *sig, PeoplesStatus status) {
-  int client = sig->client;
+  HttpClient *client = sig->client;
 
   if (status == PEOPLES_OK) {
     http_sendStatus(client, HTTP_STATUS_OK);
@@ -115,7 +115,7 @@ static void onPeoplesRemoveResp(PeoplesRemoveSig *sig, PeoplesStatus status) {
   free(sig);
 }
 
-void webPeoples_remove(int client) {
+void webPeoples_remove(HttpClient *client) {
   PeoplesRemoveSig *sig = malloc(sizeof(PeoplesRemoveSig));
   sig->id = http_reqParam(client, "id");
   sig->callback = onPeoplesRemoveResp;
@@ -127,7 +127,7 @@ void webPeoples_remove(int client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesUpdateResp(PeoplesUpdateSig *sig, PeoplesStatus status) {
-  int client = sig->client;
+  HttpClient *client = sig->client;
 
   if (status == PEOPLES_OK) {
     http_sendStatus(client, HTTP_STATUS_OK);
@@ -143,7 +143,7 @@ static void onPeoplesUpdateResp(PeoplesUpdateSig *sig, PeoplesStatus status) {
   free(sig);
 }
 
-void webPeoples_update(int client) {
+void webPeoples_update(HttpClient *client) {
   PeoplesUpdateSig *sig = malloc(sizeof(PeoplesUpdateSig));
   sig->id = http_reqParam(client, "id");
   sig->name = http_reqParam(client, "name");
@@ -157,7 +157,7 @@ void webPeoples_update(int client) {
 ////////////////////////////////////////////////////////////////////////////////
 
 static void onPeoplesDetailsResp(PeoplesDetailsSig *sig, PeoplesStatus status) {
-  int client = sig->client;
+  HttpClient *client = sig->client;
 
   if (status == PEOPLES_OK) {
     str_t *body = str_new(1000);
@@ -179,7 +179,7 @@ static void onPeoplesDetailsResp(PeoplesDetailsSig *sig, PeoplesStatus status) {
   free(sig);
 }
 
-void webPeoples_details(int client) {
+void webPeoples_details(HttpClient *client) {
   PeoplesDetailsSig *sig = malloc(sizeof(PeoplesDetailsSig));
   sig->id = http_reqArg(client, 0);
   sig->callback = onPeoplesDetailsResp;

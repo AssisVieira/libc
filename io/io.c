@@ -38,83 +38,90 @@ typedef struct IO {
   int closeResult;
 } IO;
 
+static thread_local IO *CURRENT = NULL;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 static void NULL_LISTENER(void *context, int fd, IOEvent events);
-static int io_open();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static thread_local IO io = {
-    .epoll = -1,
-    .fds = NULL,
-    .close = true,
-};
+IO *io_current() { return CURRENT; }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void io_close(int result) {
-  log_dbug("io", "Fechando io...\n");
-  io.close = true;
-  io.closeResult = result;
+void io_close(IO *io, int result) {
+  log_dbug("io", "Closing io: %d\n", io->epoll);
+  io->close = true;
+  io->closeResult = result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int io_run(int maxEvents) {
+int io_run(IO *io, int maxEvents) {
   const int INFINITE_TIME = -1;
   struct epoll_event fds[maxEvents];
 
-  if (io_open()) return -1;
+  if (io == NULL) {
+    io = io_new();
+    if (io == NULL) {
+      log_erro("io", "io_new()\n");
+      return -1;
+    }
+  }
 
-  while (!io.close) {
-    log_dbug("io", "Aguardando eventos...\n");
+  CURRENT = io;
 
-    int numFds = epoll_wait(io.epoll, fds, maxEvents, INFINITE_TIME);
+  log_dbug("io", "Running io: %d, maxEvents: %d\n", io->epoll, maxEvents);
 
-    log_dbug("io", "File descriptors prontos: %d.\n", numFds);
+  while (!io->close) {
+    log_dbug("io", "Waiting events: %d\n", io->epoll);
+
+    int numFds = epoll_wait(io->epoll, fds, maxEvents, INFINITE_TIME);
+
+    log_dbug("io", "File descriptors ready: %d.\n", numFds);
 
     if (numFds == -1 && errno != EINTR) {
-      log_erro("io", "Erro em epoll_wait(): %d - %s.\n", errno,
-               strerror(errno));
-      io_close(-1);
+      log_erro("io", "epoll_wait(): %d - %s.\n", errno, strerror(errno));
+      io_close(io, -1);
       continue;
     }
 
     for (int i = 0; i < numFds; i++) {
       int fd = fds[i].data.fd;
-      IOFd *ioFd = vetor_item(io.fds, (size_t)fd);
+      IOFd *ioFd = vetor_item(io->fds, (size_t)fd);
       ioFd->listener(ioFd->context, fd, fds[i].events);
     }
   }
 
-  if (close(io.epoll) == -1) {
-    log_erro("io", "Erro em close(): %d - %s.\n", errno, strerror(errno));
+  if (close(io->epoll) == -1) {
+    log_erro("io", "close(): %d - %s.\n", errno, strerror(errno));
   }
 
-  io.epoll = -1;
+  io->epoll = -1;
 
-  for (int i = 0; i < vetor_qtd(io.fds); i++) {
-    free(vetor_item(io.fds, i));
+  for (int i = 0; i < vetor_qtd(io->fds); i++) {
+    free(vetor_item(io->fds, i));
   }
 
-  vetor_destruir(io.fds);
+  vetor_destruir(io->fds);
 
-  log_dbug("io", "Fechado.\n");
+  log_dbug("io", "IO closed: %d.\n", io->epoll);
+  int result = io->closeResult;
 
-  return io.closeResult;
+  free(io);
+
+  return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int io_add(int fd, IOEvent events, void *context, IOListener listener) {
-  if (io_open()) return -1;
-
-  IOFd *ioFd = vetor_item(io.fds, (size_t)fd);
+int io_add(IO *io, int fd, IOEvent events, void *context, IOListener listener) {
+  IOFd *ioFd = vetor_item(io->fds, (size_t)fd);
 
   if (ioFd == NULL) {
     ioFd = malloc(sizeof(IOFd));
-    vetor_inserir(io.fds, (size_t)fd, ioFd);
+    vetor_inserir(io->fds, (size_t)fd, ioFd);
   }
 
   ioFd->epollEvent.events = events;
@@ -124,15 +131,13 @@ int io_add(int fd, IOEvent events, void *context, IOListener listener) {
 
   log_dbug("io", "Instalando monitor %d.\n", fd);
 
-  return epoll_ctl(io.epoll, EPOLL_CTL_ADD, fd, &ioFd->epollEvent);
+  return epoll_ctl(io->epoll, EPOLL_CTL_ADD, fd, &ioFd->epollEvent);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int io_mod(int fd, IOEvent events, void *context, IOListener listener) {
-  if (io_open()) return -1;
-
-  IOFd *ioFd = vetor_item(io.fds, (size_t)fd);
+int io_mod(IO *io, int fd, IOEvent events, void *context, IOListener listener) {
+  IOFd *ioFd = vetor_item(io->fds, (size_t)fd);
 
   if (ioFd == NULL) return -1;
 
@@ -142,15 +147,13 @@ int io_mod(int fd, IOEvent events, void *context, IOListener listener) {
 
   log_dbug("io", "Modificando monitor: %d.\n", fd);
 
-  return epoll_ctl(io.epoll, EPOLL_CTL_MOD, fd, &ioFd->epollEvent);
+  return epoll_ctl(io->epoll, EPOLL_CTL_MOD, fd, &ioFd->epollEvent);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int io_del(int fd) {
-  if (io_open()) return -1;
-
-  IOFd *ioFd = vetor_item(io.fds, (size_t)fd);
+int io_del(IO *io, int fd) {
+  IOFd *ioFd = vetor_item(io->fds, (size_t)fd);
 
   if (ioFd == NULL) return -1;
 
@@ -161,36 +164,41 @@ int io_del(int fd) {
 
   log_dbug("io", "Removendo monitor: %d.\n", fd);
 
-  return epoll_ctl(io.epoll, EPOLL_CTL_DEL, fd, &ioFd->epollEvent);
+  return epoll_ctl(io->epoll, EPOLL_CTL_DEL, fd, &ioFd->epollEvent);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static int io_open() {
-  if (!io.close) return 0;
+IO *io_new() {
+  IO *io = malloc(sizeof(IO));
 
-  log_dbug("io", "Abrindo io...\n");
-
-  io.epoll = epoll_create1(0);
-
-  if (io.epoll <= 0) {
-    log_erro("io", "Erro em epoll_create1(): %d - %s.\n", errno,
-             strerror(errno));
-    return -1;
+  if (io == NULL) {
+    log_erro("io", "malloc(): %d - %s.\n", errno, strerror(errno));
+    return NULL;
   }
 
-  io.fds = vetor_criar(10);
+  io->epoll = epoll_create1(0);
 
-  if (io.fds == NULL) {
+  if (io->epoll <= 0) {
+    log_erro("io", "epoll_create1(): %d - %s.\n", errno, strerror(errno));
+    free(io);
+    return NULL;
+  }
+
+  io->fds = vetor_criar(10);
+
+  if (io->fds == NULL) {
     log_erro("io", "vetor_criar()\n");
-    close(io.epoll);
-    io.epoll = -1;
-    return -1;
+    close(io->epoll);
+    free(io);
+    return NULL;
   }
 
-  io.close = false;
+  io->close = false;
 
-  return 0;
+  log_dbug("io", "IO created: %d.\n", io->epoll);
+
+  return io;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

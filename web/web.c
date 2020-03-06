@@ -51,8 +51,8 @@ static thread_local Web web = {
 ////////////////////////////////////////////////////////////////////////////////
 
 static HttpMimeType mimeTypeByFilename(const char *filename);
-static void web_redirectHandler(int client);
-static void web_assetHandler(int client);
+static void web_redirectHandler(HttpClient *client);
+static void web_assetHandler(HttpClient *client);
 static int web_init();
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -131,7 +131,7 @@ void web_assets(const char *pattern, const char *publicDir) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void web_assetHandler(int client) {
+static void web_assetHandler(HttpClient *client) {
   const char *pathReq = http_reqArg(client, 0);
   char pathFile[PATH_MAX];
 
@@ -169,7 +169,7 @@ void web_redirect(const char *pattern, const char *to) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void web_redirectHandler(int client) {
+static void web_redirectHandler(HttpClient *client) {
   const char *pattern = http_reqPattern(client);
   const char *pathOrig = http_reqPath(client);
   const char *pathDest = hashTable_value(web.redirects, pattern);
