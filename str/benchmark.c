@@ -51,6 +51,8 @@ static void testStrCaseCmp() {
   {
     const char *s11 = str_cstr(s1);
     const char *s22 = str_cstr(s2);
+    (void)s11;
+    (void)s22;
     clock_t begin1 = clock();
     for (int i = 0; i < ntests; i++) {
       assert(strcmp(s11, s22) == 0);
@@ -83,6 +85,7 @@ static void testFmt() {
     for (int i = 0; i < ntests; i++) {
       str_clear(str);
       size_t bytesAdded = str_fmt(str, fmt, name, yearsOld, height, time);
+      (void)bytesAdded;
       assert(bytesAdded > 0);
       assert(str_cmpcstr(str, strFmted) == 0);
     }
@@ -97,6 +100,7 @@ static void testFmt() {
     for (int i = 0; i < ntests; i++) {
       str1[0] = '\0';
       size_t bytesAdded = sprintf(str1, stdFmt, name, yearsOld, height, time);
+      (void)bytesAdded;
       assert(bytesAdded > 0);
       assert(strcmp(str1, strFmted) == 0);
     }
