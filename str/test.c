@@ -95,7 +95,7 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -108,7 +108,7 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1, arg2);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1, arg2);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -121,7 +121,7 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1, arg2);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1, arg2);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -134,7 +134,7 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1, arg2);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1, arg2);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -155,7 +155,7 @@ static void testFmt() {
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
     size_t bytesAdded =
-        str_fmt(str, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+        str_fmt(&str, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -168,7 +168,7 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -181,7 +181,7 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1, arg2);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1, arg2);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -194,7 +194,7 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1, arg2);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1, arg2);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -207,7 +207,7 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1, arg2);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1, arg2);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -228,7 +228,7 @@ static void testFmt() {
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
     size_t bytesAdded =
-        str_fmt(str, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+        str_fmt(&str, fmt, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -240,7 +240,7 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1);
     assert(bytesAdded == strRespLen);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
@@ -252,8 +252,20 @@ static void testFmt() {
     //---
     const size_t strRespLen = strlen(strResp);
     str_t *str = str_new(strRespLen + 1);
-    size_t bytesAdded = str_fmt(str, fmt, arg1);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1);
     assert(bytesAdded == strRespLen);
+    assert(str_cmpcstr(str, strResp) == 0);
+    str_free(&str);
+  }
+  {
+    const int arg1 = 1000;
+    const char *fmt = "%d";
+    const char *strResp = "1000";
+    //---
+    str_t *str = str_new(1);
+    size_t bytesAdded = str_fmt(&str, fmt, arg1);
+    assert(bytesAdded == 4);
+    assert(str_len(str) == 4);
     assert(str_cmpcstr(str, strResp) == 0);
     str_free(&str);
   }

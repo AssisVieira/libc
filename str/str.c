@@ -23,6 +23,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#define STR_EXPAND_FACTOR 0.7
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct str_t {
@@ -368,42 +370,72 @@ static size_t itoa(long long value, int radix, bool uppercase, bool unsig,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-size_t str_fmtv(str_t *str, const char *fmt, va_list va) {
+static int max(int a, int b) { return (a < b) ? b : a; };
+
+size_t str_fmtv(str_t **strp, const char *fmt, va_list va) {
+  str_t *str = *strp;
   const size_t initLen = str->length;
-  const size_t maxLen = str->size - 1;
+  size_t maxLen = str->size - 1;
 
   for (; *fmt; fmt++) {
     if (*fmt != '%') {
       if (str->length == maxLen) {
-        break;
+        str_t *newStr = str_expand(str, maxLen * STR_EXPAND_FACTOR);
+        if (newStr == NULL) {
+          return -1;
+        }
+        str = *strp = newStr;
+        maxLen = str->size - 1;
       }
       str->buff[str->length++] = *fmt;
+      str->buff[str->length] = '\0';
     } else if (*fmt == '%') {
       fmt++;
       if (*fmt == 's') {
         const char *buff = va_arg(va, const char *);
-        while (*buff && str->length < maxLen) {
+        while (*buff) {
+
+          if (str->length == maxLen) {
+            str_t *newStr = str_expand(str, maxLen * STR_EXPAND_FACTOR);
+            if (newStr == NULL) {
+              return -1;
+            }
+            str = *strp = newStr;
+            maxLen = str->size - 1;
+          }
+
           str->buff[str->length++] = *buff++;
+          str->buff[str->length] = '\0';
         }
       } else if (*fmt == 'd' || *fmt == 'l') {
         long long num = (*fmt == 'd') ? va_arg(va, int) : va_arg(va, long long);
         char buff[32];
         size_t buffLen = itoa(num, 10, true, false, buff, 0);
-        if (str->length + buffLen - 1 == maxLen) {
-          break;
+        while (str->length + buffLen - 1 == maxLen) {
+          str_t *newStr = str_expand(str, max(buffLen, maxLen * STR_EXPAND_FACTOR));
+          if (newStr == NULL) {
+            return -1;
+          }
+          str = *strp = newStr;
+          maxLen = str->size - 1;
         }
         memcpy(str->buff + str->length, buff, buffLen);
         str->length += buffLen;
+        str->buff[str->length] = '\0';
       } else {
         if (str->length == maxLen) {
-          break;
+          str_t *newStr = str_expand(str, maxLen * STR_EXPAND_FACTOR);
+          if (newStr == NULL) {
+            return -1;
+          }
+          str = *strp = newStr;
+          maxLen = str->size - 1;
         }
         str->buff[str->length++] = *fmt;
+        str->buff[str->length] = '\0';
       }
     }
   }
-
-  str->buff[str->length] = '\0';
 
   if (*fmt != '\0') {
     return -1;
@@ -414,7 +446,7 @@ size_t str_fmtv(str_t *str, const char *fmt, va_list va) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-size_t str_fmt(str_t *str, const char *fmt, ...) {
+size_t str_fmt(str_t **str, const char *fmt, ...) {
   va_list va;
   va_start(va, fmt);
   size_t r = str_fmtv(str, fmt, va);

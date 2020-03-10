@@ -234,18 +234,14 @@ str_t *str_clone(const str_t *str);
 /**
  * Adiciona uma string parametrizada no final de outra string.
  *
- * Esta função não realiza alocação dinâmica, tal como as funções str_add(),
- * str_addc() e str_adds(). Se não houver espaço suficiente na string str, a
- * a formatação será encerrada.
- *
  * @param  str     string a ser concatenada.
  * @param  fmt     string formatada.
  * @param  VARARGS argumentos variadic para a string formatada.
  * @return         quantidade de bytes adicionados na string ou -1 se a string
  *                 não tiver mais espaço disponível.
  */
-size_t str_fmt(str_t *str, const char *fmt, ...);
-size_t str_fmtv(str_t *str, const char *fmt, va_list va);
+size_t str_fmt(str_t **str, const char *fmt, ...);
+size_t str_fmtv(str_t **str, const char *fmt, va_list va);
 
 /**
  * Obtem uma string nula, baseado no padrão Null Object.
