@@ -33,6 +33,7 @@
 #include <sys/types.h>
 #include <threads.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include "io/io.h"
 
@@ -95,10 +96,11 @@ static void onServerEvent(void *context, int fd, IOEvent event) {
 
   eventReadThrowred = true;
 
-  io_close(0);
+  io_close(io_current(), 0);
 }
 
 static int serverTask(void *arg) {
+  IO *io = NULL;
   int fd = -1;
 
   struct sockaddr_in address = {0};
@@ -133,9 +135,11 @@ static int serverTask(void *arg) {
     return -1;
   }
 
-  assert(io_add(fd, IO_READ | IO_EDGE_TRIGGERED, NULL, onServerEvent) == 0);
+  io = io_new();
 
-  return io_run(10);
+  assert(io_add(io, fd, IO_READ | IO_EDGE_TRIGGERED, NULL, onServerEvent) == 0);
+
+  return io_run(io, 10);
 }
 
 static thrd_t startServer() {

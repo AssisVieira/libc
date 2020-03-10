@@ -196,6 +196,8 @@ IO *io_new() {
 
   io->close = false;
 
+  CURRENT = io;
+
   log_dbug("io", "IO created: %d.\n", io->epoll);
 
   return io;
