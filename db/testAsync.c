@@ -18,10 +18,22 @@
 #include "log/log.h"
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
+
+static void insertPeople(DB *db);
+static void selectPeople(DB *db);
+static void onPeopleSelected(DB *db);
+
+typedef struct People {
+  char name[32];
+  char email[128];
+} People;
 
 int main() {
-  if (db_openPool(5, 10, false)) {
-    perror("db_openPool().\n");
+  IO *io = io_new();
+
+  if (db_openPool(5, 10, true)) {
+    perror("Falha ao abrir o pool.\n");
     return -1;
   }
 
@@ -29,21 +41,29 @@ int main() {
 
   assert(db != NULL);
 
+  insertPeople(db);
+
+  return io_run(io, 10);
+}
+
+static void insertPeople(DB *db) {
   db_sql(db, "insert into people (name, email) values ($1::text, $2::text)");
   db_param(db, "John");
   db_param(db, "john@john.com");
-  assert(db_exec(db) == 0);
+  db_send(db, NULL, selectPeople);
+}
 
+static void selectPeople(DB *db) {
+  assert(db_error(db) == false);
   db_sql(db, "select name, email from people limit 1");
-  assert(db_exec(db) == 0);
+  db_send(db, NULL, onPeopleSelected);
+}
 
+static void onPeopleSelected(DB *db) {
+  assert(db_error(db) == false);
   assert( db_count(db) == 1 );
   assert( strcmp(db_value(db, 0, 0), "John") == 0 );
   assert( strcmp(db_value(db, 0, 1), "john@john.com") == 0 );
-
   db_close(db);
-
-  db_closePool();
-
-  return 0;
+  io_close(io_current(), 0);
 }

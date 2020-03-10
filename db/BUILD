@@ -27,8 +27,24 @@ cc_library(
 
 
 cc_test(
+    name = "testAsync",
+    srcs = ["testAsync.c"],
+    linkstatic = True,
+    deps = [":db"],
+    visibility = ["//visibility:public"]
+)
+
+cc_test(
     name = "test",
     srcs = ["test.c"],
+    linkstatic = True,
+    deps = [":db"],
+    visibility = ["//visibility:public"]
+)
+
+cc_test(
+    name = "testRollback",
+    srcs = ["testRollback.c"],
     linkstatic = True,
     deps = [":db"],
     visibility = ["//visibility:public"]

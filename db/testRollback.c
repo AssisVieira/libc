@@ -21,7 +21,7 @@
 
 int main() {
   if (db_openPool(5, 10, false)) {
-    perror("db_openPool().\n");
+    perror("Falha ao abrir o pool.\n");
     return -1;
   }
 
@@ -29,17 +29,24 @@ int main() {
 
   assert(db != NULL);
 
+  db_sql(db, "delete from people");
+  db_exec(db);
+  db_commit(db);
+
+  db_sql(db, "delete from people");
+  assert(db_exec(db) == 0);
+
   db_sql(db, "insert into people (name, email) values ($1::text, $2::text)");
   db_param(db, "John");
   db_param(db, "john@john.com");
   assert(db_exec(db) == 0);
 
-  db_sql(db, "select name, email from people limit 1");
+  db_rollback(db);
+
+  db_sql(db, "select id, name, email from people");
   assert(db_exec(db) == 0);
 
-  assert( db_count(db) == 1 );
-  assert( strcmp(db_value(db, 0, 0), "John") == 0 );
-  assert( strcmp(db_value(db, 0, 1), "john@john.com") == 0 );
+  assert(db_count(db) == 0);
 
   db_close(db);
 

@@ -153,7 +153,7 @@ static int server_init(ServerParams params) {
   if (server.clients == NULL) goto error;
 
   struct sockaddr_in address = {0};
-  address.sin_addr.s_addr = inet_addr(params.host);
+  address.sin_addr.s_addr = htonl(INADDR_ANY);
   address.sin_family = AF_INET;
   address.sin_port = htons(params.port);
 

@@ -26,9 +26,10 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void db_onEventConnect(void *instancia, int fd, IOEvent event);
 static void db_onEventQuery(void *context, int fd, IOEvent event);
 static void db_destroy(DB *db);
+static int db_begin(DB *db);
+static int db_commit2(DB *db, bool chained);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -69,7 +70,7 @@ static DBPool pool = {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int db_openPool(int min, int max) {
+int db_openPool(int min, int max, bool async) {
   pool.min = min;
   pool.max = max;
 
@@ -78,7 +79,7 @@ int db_openPool(int min, int max) {
   if (strConn == NULL || strlen(strConn) == 0) {
     log_erro("db",
              "Variável de ambiente não definida: DB_STRING_CONNECTION. "
-             "Exemplo: export DB_STRING_CONNECTION=\"host=127.0.0.1 port=5433 "
+             "Exemplo: export DB_STRING_CONNECTION=\"host=127.0.0.1 port=5432 "
              "user=assis password=assis dbname=assis sslmode=require\"\n");
     return -1;
   }
@@ -102,34 +103,25 @@ int db_openPool(int min, int max) {
   for (int i = 0; i < min; i++) {
     DB *db = &pool.dbs[i];
 
-    db->conn = PQconnectStart(strConn);
+    db->conn = PQconnectdb(strConn);
 
-    if (PQstatus(db->conn) == CONNECTION_BAD) {
-      log_erro("db", "Erro ao abrir conexão no slot %d: PQstatus().\n", i);
-      db_destroy(db);
+    if (PQstatus(db->conn) != CONNECTION_OK) {
+      log_erro("db", "Erro ao abrir conexão no slot %d: %s.\n", i, PQerrorMessage(db->conn));
       return -1;
     }
 
-    if (PQsetnonblocking(db->conn, 1) != 0) {
-      log_erro("db", "Erro ao abrir conexão no slot %d: PQsetnonblocking().\n",
-               i);
-      db_destroy(db);
-      return -1;
-    }
+    if (async) {
+      if (PQsetnonblocking(db->conn, 1) != 0) {
+        log_erro("db", "PQsetnonblocking().\n");
+        db_destroy(db);
+        return -1;
+      }
 
-    if (PQsocket(db->conn) < 0) {
-      log_erro("db", "Erro ao abrir conexão no slot %d: PQsocket().\n", i);
-      db_destroy(db);
-      return -1;
-    }
-
-    if (io_add(io_current(), PQsocket(db->conn), IO_WRITE, db, db_onEventConnect)) {
-      log_erro("db",
-               "Erro ao abrir conexão no slot %d: "
-               "io_listen(IO_ERROR).\n",
-               i);
-      db_destroy(db);
-      return -1;
+      if (io_add(io_current(), PQsocket(db->conn), IO_READ, db, db_onEventQuery)) {
+        log_erro("db", "io_add().\n");
+        db_destroy(db);
+        return -1;
+      }
     }
   }
 
@@ -160,6 +152,7 @@ DB *db_open() {
     }
 
     if (PQstatus(pool.dbs[i].conn) != CONNECTION_OK) {
+      log_info("db", "connection %d: %d\n", i, PQstatus(pool.dbs[i].conn));
       continue;
     }
 
@@ -173,10 +166,15 @@ DB *db_open() {
 
   if (db != NULL) {
     db->idle = false;
+    
+    if (db_begin(db)) {
+      return NULL;
+    }
+
     return db;
   }
 
-  log_erro("db", "Sem conexão disponível.\n");
+  log_warn("db", "Sem conexão disponível.\n");
 
   return NULL;
 }
@@ -235,8 +233,58 @@ void db_clear(DB *db) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+int db_rollback(DB *db) {
+  db_sql(db, "ROLLBACK");
+  if (db_exec(db)) {
+    log_erro("db", "rollback fail.\n");
+    db_destroy(db);
+    return -1;
+  }
+  if (db_begin(db)) {
+    return -1;
+  }
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int db_commit(DB *db) {
+  return db_commit2(db, true);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int db_commit2(DB *db, bool chained) {
+  db_sql(db, "COMMIT");
+  if (db_exec(db)) {
+    log_erro("db", "commit fail.\n");
+    db_destroy(db);
+    return -1;
+  }
+  if (chained && db_begin(db)) {
+    return -1;
+  }
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int db_begin(DB *db) {
+  db_sql(db, "BEGIN");
+  if (db_exec(db)) {
+    log_erro("db", "begin fail.\n");
+    db_destroy(db);
+    return -1;
+  }
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void db_close(DB *db) {
   if (db == NULL) return;
+
+  db_commit2(db, false);
 
   db_clear(db);
 
@@ -292,7 +340,7 @@ void db_send(DB *db, void *context, onDBCallback onCmdResult) {
   db->onCmdResult = onCmdResult;
   db->context = context;
 
-  log_dbug("db", "send: %s\n", db->sql);
+  log_dbug("db", "%s;\n", db->sql);
 
   if (!PQsendQueryParams(db->conn, db->sql, db->paramsLen, NULL, db->params,
                          NULL, NULL, PG_FORMAT_TEXT)) {
@@ -300,6 +348,28 @@ void db_send(DB *db, void *context, onDBCallback onCmdResult) {
     db->error = true;
     db->onCmdResult(db);
   }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int db_exec(DB *db) {
+  if (db == NULL) return -1;
+
+  db->onCmdResult = NULL;
+  db->context = NULL;
+
+  log_dbug("db", "%s;\n", db->sql);
+
+  db->result = PQexecParams(db->conn, db->sql, db->paramsLen, NULL, db->params,
+                         NULL, NULL, PG_FORMAT_TEXT);
+
+  if (PQresultStatus(db->result) != PGRES_TUPLES_OK && PQresultStatus(db->result) != PGRES_COMMAND_OK) {
+    log_erro("db", "%s", PQerrorMessage(db->conn));
+    db->error = true;
+    return -1;
+  }
+
+  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -359,81 +429,3 @@ static void db_onEventQuery(void *context, int fd, IOEvent event) {
 
 bool db_error(DB *db) { return (db == NULL || db->error); }
 
-////////////////////////////////////////////////////////////////////////////////
-
-static void db_onEventConnect(void *context, int fd, IOEvent event) {
-  DB *db = context;
-  (void)fd;
-
-  if (event & IO_ERROR) {
-    // DB *db = context;
-    log_erro("db", "Erro ao abrir conexão: db_onSocketError(fd = %d).\n", fd);
-    db_destroy(db);
-    return;
-  }
-
-  int polling = PQconnectPoll(db->conn);
-
-  if (polling == PGRES_POLLING_READING) {
-    log_dbug("db", "PQconnectPoll() : PGRES_POLLING_READING\n");
-
-    if (io_mod(io_current(),PQsocket(db->conn), IO_READ, db, db_onEventConnect)) {
-      log_erro("db",
-               "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = %d).\n",
-               fd, polling);
-      db_destroy(db);
-      return;
-    }
-
-    return;
-  }
-
-  if (polling == PGRES_POLLING_WRITING) {
-    log_dbug("db", "PQconnectPoll() : PGRES_POLLING_WRITING\n");
-
-    if (io_mod(io_current(), PQsocket(db->conn), IO_WRITE, db, db_onEventConnect)) {
-      log_erro("db",
-               "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = %d).\n",
-               fd, polling);
-      db_destroy(db);
-      return;
-    }
-
-    return;
-  }
-
-  if (polling == PGRES_POLLING_OK) {
-    log_dbug("db", "PQconnectPoll() : PGRES_POLLING_OK\n");
-    log_dbug("db", "PQstatus() : %d\n", PQstatus(db->conn));
-
-    if (io_mod(io_current(), PQsocket(db->conn), IO_READ, db, db_onEventQuery)) {
-      log_erro("db",
-               "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = "
-               "PGRES_POLLING_OK).\n",
-               fd);
-      db_destroy(db);
-      return;
-    }
-
-    if (PQsetnonblocking(db->conn, 1 /*NON-BLOCKING*/) == 0) {
-      log_info("db", "Conexão estabelecida (fd = %d).\n", fd);
-    } else {
-      log_erro("db",
-               "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = "
-               "PGRES_POLLING_OK) -> "
-               "PQsetnonblocking().\n",
-               fd);
-      db_destroy(db);
-    }
-    return;
-  }
-
-  if (polling == PGRES_POLLING_FAILED) {
-    log_erro("db",
-             "Erro ao abrir conexão: db_onConnect(fd = %d, pooling = "
-             "PGRES_POLLING_FAILED): %s",
-             fd, PQerrorMessage(db->conn));
-    db_destroy(db);
-    return;
-  }
-}

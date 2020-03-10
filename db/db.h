@@ -30,11 +30,12 @@ typedef void (*onDBCallback)(DB *db);
 /**
  * Inicializa o pool de conexões.
  *
- * @param  min quantidade mínima de conexões ociosas.
- * @param  max quantidade máxima de conexões ativas.
- * @return     0, em caso de sucesso, -1, em caso de erro.
+ * @param  min   quantidade mínima de conexões ociosas.
+ * @param  max   quantidade máxima de conexões ativas.
+ * @param  async true, se a conexão deve ser assíncrona, false, caso contrário.
+ * @return       0, em caso de sucesso, -1, em caso de erro.
  */
-int db_openPool(int min, int max);
+int db_openPool(int min, int max, bool async);
 
 /**
  * Encerra o pool de conexões.
@@ -47,6 +48,10 @@ void db_closePool();
  * @return conexão com o banco de dados.
  */
 DB *db_open();
+
+int db_rollback(DB *db);
+
+int db_commit(DB *db);
 
 /**
  * Devolve uma conexão para o pool de conexões.
@@ -89,6 +94,9 @@ void db_paramInt(DB *db, int value);
  * @param onCmdResult callback para tratar a resposta do comando sql.
  */
 void db_send(DB *db, void *context, onDBCallback onCmdResult);
+
+
+int db_exec(DB *db);
 
 /**
  * Obtém o valor de um campo no resultado do comando sql.
