@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #define STR_EXPAND_FACTOR 0.7
 
@@ -163,6 +164,34 @@ int str_addc(str_t **dest, char c) {
   newStr->buff[newStr->length++] = c;
 
   newStr->buff[newStr->length] = '\0';
+
+  *dest = newStr;
+
+  return 0;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int str_setc(str_t **dest, size_t pos, char c) {
+  assert(dest != NULL);
+  assert(*dest != NULL);
+  str_t *newStr = *dest;
+
+  while (newStr->size <= (pos + 1)) {
+    newStr = str_expand(newStr, ceil(newStr->size * STR_EXPAND_FACTOR));
+    if (newStr == NULL) {
+      return -1;
+    }
+  }
+
+  if (newStr->length <= pos) {
+    newStr->buff[pos] = c;
+    newStr->buff[pos+1] = '\0';
+    newStr->length = pos + 1;
+  } else {
+    newStr->buff[pos] = c;
+  }
+  
 
   *dest = newStr;
 
@@ -380,7 +409,7 @@ size_t str_fmtv(str_t **strp, const char *fmt, va_list va) {
   for (; *fmt; fmt++) {
     if (*fmt != '%') {
       if (str->length == maxLen) {
-        str_t *newStr = str_expand(str, maxLen * STR_EXPAND_FACTOR);
+        str_t *newStr = str_expand(str, ceil(maxLen * STR_EXPAND_FACTOR));
         if (newStr == NULL) {
           return -1;
         }
@@ -396,7 +425,7 @@ size_t str_fmtv(str_t **strp, const char *fmt, va_list va) {
         while (*buff) {
 
           if (str->length == maxLen) {
-            str_t *newStr = str_expand(str, maxLen * STR_EXPAND_FACTOR);
+            str_t *newStr = str_expand(str, ceil(maxLen * STR_EXPAND_FACTOR));
             if (newStr == NULL) {
               return -1;
             }
@@ -412,7 +441,7 @@ size_t str_fmtv(str_t **strp, const char *fmt, va_list va) {
         char buff[32];
         size_t buffLen = itoa(num, 10, true, false, buff, 0);
         while (str->length + buffLen - 1 == maxLen) {
-          str_t *newStr = str_expand(str, max(buffLen, maxLen * STR_EXPAND_FACTOR));
+          str_t *newStr = str_expand(str, max(buffLen, ceil(maxLen * STR_EXPAND_FACTOR)));
           if (newStr == NULL) {
             return -1;
           }
@@ -424,7 +453,7 @@ size_t str_fmtv(str_t **strp, const char *fmt, va_list va) {
         str->buff[str->length] = '\0';
       } else {
         if (str->length == maxLen) {
-          str_t *newStr = str_expand(str, maxLen * STR_EXPAND_FACTOR);
+          str_t *newStr = str_expand(str, ceil(maxLen * STR_EXPAND_FACTOR));
           if (newStr == NULL) {
             return -1;
           }

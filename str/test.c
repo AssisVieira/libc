@@ -490,6 +490,53 @@ static void testRm() {
   }
 }
 
+static void testSetC() {
+  {
+    str_t *str = str_new(2);
+
+    assert( str_setc(&str, 0, 'a') == 0);
+    assert( str_len(str) == 1);
+    assert( str_size(str) == 2);
+    assert( str_cmpcstr(str, "a") == 0);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_new(2);
+
+    assert( str_setc(&str, 0, 'a') == 0);
+    assert( str_setc(&str, 1, 'b') == 0);
+    assert( str_len(str) == 2);
+    assert( str_size(str) == 4);
+    assert( str_cmpcstr(str, "ab") == 0);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_new(1);
+
+    assert( str_setc(&str, 0, 'a') == 0);
+    assert( str_setc(&str, 1, 'b') == 0);
+    assert( str_len(str) == 2);
+    assert( str_size(str) == 4);
+    assert( str_cmpcstr(str, "ab") == 0);
+
+    str_free(&str);
+  }
+  {
+    str_t *str = str_new(1);
+
+    assert( str_setc(&str, 0, 'a') == 0);
+    assert( str_setc(&str, 1, 'b') == 0);
+    assert( str_setc(&str, 3, 'c') == 0);
+    assert( str_len(str) == 4);
+    assert( str_size(str) == 6);
+    assert( str_cmpcstr(str, "ab") == 0);
+
+    str_free(&str);
+  }
+}
+
 int main() {
   testBasic();
   testStrCaseCmp();
@@ -502,5 +549,6 @@ int main() {
   testLength();
   testFmt();
   testRm();
+  testSetC();
   return 0;
 }

@@ -98,6 +98,16 @@ int str_add(str_t **dest, const str_t *orig);
 int str_addc(str_t **dest, char c);
 
 /**
+ * Insere um caractere (char) em uma determinada posição.
+ *
+ * @param  dest  string destino.
+ * @param  pos   posição dentro da string, a partir de 0.
+ * @param  c     caractere a ser inserido.
+ * @return       0, se a inserção foi realizada com sucesso, -1, caso contrário.
+ */
+int str_setc(str_t **dest, size_t pos, char c);
+
+/**
  * Adiciona uma string convencional no final de string str_t.
  *
  * Considerando `dest` uma string do tipo `str_t *` e `orig` uma string do tipo
@@ -279,6 +289,5 @@ str_t *str_move(str_t **str);
  * @return        0, em caso de sucesso, -1, em caso de erros.
  */
 int str_rm(str_t *str, int start, int count);
-
 
 #endif
