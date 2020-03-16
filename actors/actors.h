@@ -3,17 +3,15 @@
 
 #include <stddef.h>
 
-typedef Actors Actors;
-typedef void (*ActorHandler)(int type, const char *msg, int size);
+typedef struct Actors Actors;
+typedef void (*ActorHandler)(int type, const void *msg, int size);
 
 /**
  * Create a instance of actor system.
  *
- * @param min minimum number of threads.
- * @param max maximum number of threads.
- * @param factor growth factor in the number of threads.
+ * @param threads number of threads.
  */
-Actors *actors_create(int min, int max, int factor);
+Actors *actors_create(int threads);
 
 /**
  * Send a async message to a actor.
@@ -25,11 +23,6 @@ Actors *actors_create(int min, int max, int factor);
  */
 void actors_send(Actors *actors, int to, int type, const void *msg,
                  size_t size);
-
-/**
- * Execute the actor system with a infinite loop.
- */
-void actors_execute(Actors *actors);
 
 /**
  * Create a instance of a actor.
@@ -52,5 +45,7 @@ int actors_actorId(Actors *actors, const char *name);
  * Destroy the actor system.
  */
 void actors_destroy(Actors *actors);
+
+void actors_wait(Actors *actors);
 
 #endif

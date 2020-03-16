@@ -2,18 +2,20 @@
 
 #include <string.h>
 
+#include "queue/queue.h"
 #include "vetor/vetor.h"
+#include "threads/thpool.h"
+#include <threads.h>
+#include <stdbool.h>
 
-typedef void Queue;
-typedef Vetor Vector;
-typedef void ThreadPool;
+typedef struct thpool_ ThreadPool;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 typedef struct Message {
   int type;
   int size;
-  void *content;
+  char *content[];
 } Message;
 
 /**
@@ -32,6 +34,7 @@ typedef struct Actor {
   char *name;
   Queue *messages;
   ActorHandler handler;
+  bool volatile scheduled;
 } Actor;
 
 /**
@@ -55,7 +58,7 @@ static void actor_destroy(Actor *actor);
 
 typedef struct Actors {
   ThreadPool *threads;
-  Vector *actors;
+  Vetor *actors;
   Queue *jobs;
 } Actors;
 
@@ -87,7 +90,27 @@ static Actor *actor_create(const char *name, int max, ActorHandler handler) {
 
 static void actor_send(Actor *actor, int type, const void *content, int size) {
   Message *message = message_create(type, content, size);
-  queue_add(actor->messages, message);
+  while (!queue_add(actor->messages, message)) thrd_yield();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void actor_worker(void *arg) {
+  Actor *actor = arg;
+
+  while (true) {
+    Message *msg = queue_get(actor->messages);
+
+    if (msg == NULL) {
+      break;
+    }
+
+    actor->handler(msg->type, msg->content, msg->size);
+
+    message_destroy(msg);
+  }
+
+  actor->scheduled = false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -97,35 +120,76 @@ static void actor_destroy(Actor *actor) {
   queue_destroy(actor->messages);
   free(actor);
 }
+////////////////////////////////////////////////////////////////////////////////
+
+static void actors_worker(void *arg) {
+  Actors *actors = arg;
+  while (1) {
+    Actor *actor = queue_get(actors->jobs);
+    if (actor == NULL) {
+      thrd_yield();
+      continue;
+    }
+    thpool_add_work(actors->threads, actor_worker, actor);
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Actors *actors_create(int min, int max, int factor) {
+Actors *actors_create(int threads) {
   Actors *actors = malloc(sizeof(Actors));
-  actors->threads = threadspoll_create(min, max, factor);
-  actors->actors = vector_create(100);
+  actors->threads = thpool_init(threads);
+  actors->actors = vetor_criar(100);
   actors->jobs = queue_create(100);
+
+  thpool_add_work(actors->threads, actors_worker, actors);
+
   return actors;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void actors_send(Actors *actors, int to, int type, const void *msg,
-                 size_t size);
+void actors_wait(Actors *actors) { thpool_wait(actors->threads); }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void actors_execute(Actors *actors);
+void actors_send(Actors *actors, int to, int type, const void *msg,
+                 size_t size) {
+  Actor *toActor = vetor_item(actors->actors, to);
+  actor_send(toActor, type, msg, size);
+  if (__sync_bool_compare_and_swap(&toActor->scheduled, false, true)) {  // CAS
+    queue_add(actors->jobs, toActor);
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
 int actors_actorCreate(Actors *actors, const char *name, int max,
-                       ActorHandler handler);
+                       ActorHandler handler) {
+  Actor *actor = actor_create(name, max, handler);
+  return vetor_add(actors->actors, actor);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int actors_actorId(Actors *actors, const char *name);
+int actors_actorId(Actors *actors, const char *name) {
+  for (int i = 0; i < vetor_qtd(actors->actors); i++) {
+    Actor *actor = vetor_item(actors->actors, i);
+    if (strcmp(actor->name, name) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void actors_destroy(Actors *actors);
+void actors_destroy(Actors *actors) {
+  thpool_destroy(actors->threads);
+  for (int i = 0; i < vetor_qtd(actors->actors); i++) {
+    Actor *actor = vetor_item(actors->actors, i);
+    actor_destroy(actor);
+  }
+  vetor_destruir(actors->actors);
+  free(actors);
+}
