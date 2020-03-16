@@ -39,7 +39,14 @@
     "c.h": "c",
     "stdint.h": "c",
     "string.h": "c",
-    "cstdint": "c"
+    "cstdint": "c",
+    "cmath": "c",
+    "ring.h": "c",
+    "stdlib.h": "c",
+    "thpool.h": "c",
+    "queue.h": "c",
+    "stdbool.h": "c",
+    "limits": "c"
   },
   "files.exclude": {
     "**/bazel-*": true,

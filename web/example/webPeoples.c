@@ -25,44 +25,41 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void onPeoplesListResp(PeoplesListSig *sig, PeoplesStatus status) {
-  HttpClient *client = sig->client;
-  str_t *body = str_new(10000);
+void webPeoples_list(HttpClient *client) {
+  const char *query = http_reqParam(client, "q");
+  int page = http_reqParamInt(client, "p", 0);
+  int pageSize = http_reqParamInt(client, "ps", 10);
 
-  if (status == PEOPLES_OK) {
-    str_fmt(body, "{\"status\": \"%d\", \"peoples\": [", status);
+  People peoples[PEOPLES_LIST_MAX_PEOPLES];  
 
-    for (int i = 0; i < sig->resp.peopleLen; i++) {
-      str_fmt(body, "{\"id\": \"%s\", \"name\": \"%s\", \"email\": \"%s\"}%s",
-              sig->resp.peoples[i].id, sig->resp.peoples[i].name,
-              sig->resp.peoples[i].email,
-              (i + 1 == sig->resp.peopleLen) ? "" : ", ");
+  int count = peoples_list(query, page, pageSize, peoples);
+
+  Json *body = json_new(10000);
+
+  if (count >= 0) {
+    json_addInt(body, "status", PEOPLES_OK);
+    json_beginArray(body, "peoples");
+    for (int i = 0; i < count; i++) {
+      json_beginObject(body, "");
+      json_add(body, "id", peoples[i].id);
+      json_add(body, "name", peoples[i].name);
+      json_add(body, "email", peoples[i].email);
+      json_endObject(body);
     }
-
-    str_fmt(body, "]}");
-
+    json_endArray(body);
   } else {
-    str_fmt(body, "{\"status\": \"%d\"}", status);
+    json_addInt(body, "status", PEOPLES_ERROR);
+    json_beginObject(body, "error");
+    json_add(body, "code", people_errorCode());
+    json_add(body, "msg", people_errorMsg());
+    json_endObject(body);
   }
 
   http_sendStatus(client, HTTP_STATUS_OK);
   http_sendType(client, HTTP_TYPE_JSON);
-  http_send(client, str_cstr(body), str_len(body));
+  http_send(client, json_cstr(body), json_len(body));
 
-  str_free(&body);
-
-  free(sig);
-}
-
-void webPeoples_list(HttpClient *client) {
-  PeoplesListSig *sig = malloc(sizeof(PeoplesListSig));
-  sig->query = http_reqParam(client, "q");
-  sig->page = http_reqParamInt(client, "p", 0);
-  sig->pageSize = http_reqParamInt(client, "ps", 10);
-  sig->callback = onPeoplesListResp;
-  sig->client = client;
-
-  peoples_list(sig);
+  json_free(&body);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

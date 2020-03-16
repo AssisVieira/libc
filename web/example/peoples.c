@@ -25,17 +25,19 @@
 
 static void peoples_listOnResp(DB *db);
 
-void peoples_list(PeoplesListSig *sig) {
-  if (sig->page < 0) {
-    sig->page = 0;
+int peoples_list(const char *query, int page, int pageSize, People *peoples) {
+  int count = -1;
+
+  if (page < 0) {
+    page = 0;
   }
 
-  if (sig->pageSize < 10) {
-    sig->pageSize = 10;
+  if (pageSize < 10) {
+    pageSize = 10;
   }
 
-  if (sig->pageSize > PEOPLES_LIST_MAX_PEOPLES) {
-    sig->pageSize = PEOPLES_LIST_MAX_PEOPLES;
+  if (pageSize > PEOPLES_LIST_MAX_PEOPLES) {
+    pageSize = PEOPLES_LIST_MAX_PEOPLES;
   }
 
   DB *db = db_open();
@@ -45,29 +47,22 @@ void peoples_list(PeoplesListSig *sig) {
          "$1 || '%' OR email ilike '%' || $1 || '%' OFFSET $2 "
          "LIMIT $3");
 
-  db_param(db, sig->query);
-  db_paramInt(db, sig->page * sig->pageSize);
-  db_paramInt(db, sig->pageSize);
+  db_param(db, query);
+  db_paramInt(db, page * pageSize);
+  db_paramInt(db, pageSize);
 
-  db_send(db, sig, peoples_listOnResp);
-}
-
-static void peoples_listOnResp(DB *db) {
-  PeoplesListSig *sig = db_context(db);
-  PeoplesStatus status = PEOPLES_ERROR;
-
-  if (!db_error(db)) {
-    status = PEOPLES_OK;
-    sig->resp.peopleLen = db_count(db);
-    for (int i = 0; i < db_count(db); i++) {
-      strcpy(sig->resp.peoples[i].id, db_value(db, i, 0));
-      strcpy(sig->resp.peoples[i].name, db_value(db, i, 1));
-      strcpy(sig->resp.peoples[i].email, db_value(db, i, 2));
+  if (!db_exec(db)) {
+    count = db_count(db);
+    for (int i = 0; i < count; i++) {
+      strcpy(peoples[i].id, db_value(db, i, 0));
+      strcpy(peoples[i].name, db_value(db, i, 1));
+      strcpy(peoples[i].email, db_value(db, i, 2));
     }
   }
 
   db_close(db);
-  return sig->callback(sig, status);
+
+  return count;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

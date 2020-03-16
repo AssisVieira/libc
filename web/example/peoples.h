@@ -38,19 +38,6 @@ typedef enum PeoplesStatus {
   PEOPLES_ERROR,
 } PeoplesStatus;
 
-typedef struct PeoplesListSig PeoplesListSig;
-typedef void (*PeoplesListCb)(PeoplesListSig *sig, PeoplesStatus status);
-struct PeoplesListSig {
-  const char *query;
-  int page;
-  int pageSize;
-  PeoplesListCb callback;
-  void *client;
-  struct {
-    int peopleLen;
-    People peoples[PEOPLES_LIST_MAX_PEOPLES];
-  } resp;
-};
 
 typedef struct PeoplesAddSig PeoplesAddSig;
 typedef void (*PeoplesAddCb)(PeoplesAddSig *sig, PeoplesStatus status);
@@ -94,7 +81,7 @@ struct PeoplesDetailsSig {
   People resp;
 };
 
-void peoples_list(PeoplesListSig *sig);
+int peoples_list(const char *query, int page, int pageSize, People *peoples);
 void peoples_update(PeoplesUpdateSig *sig);
 void peoples_add(PeoplesAddSig *sig);
 void peoples_remove(PeoplesRemoveSig *sig);
