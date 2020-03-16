@@ -27,41 +27,57 @@ typedef struct DB DB;
 
 typedef void (*onDBCallback)(DB *db);
 
+typedef struct DBPool DBPool;
+
 /**
- * Inicializa o pool de conexões.
+ * Cria um o pool de conexões.
  *
- * @param  min   quantidade mínima de conexões ociosas.
  * @param  max   quantidade máxima de conexões ativas.
- * @param  async true, se a conexão deve ser assíncrona, false, caso contrário.
- * @return       0, em caso de sucesso, -1, em caso de erro.
+ * @param  async true, se as conexões devem ser assíncronas, false, caso
+ * contrário.
+ * @return       uma instancia de pool de conexões, em caso de sucesso, NULL, em
+ * caso de erro.
  */
-int db_openPool(int min, int max, bool async);
+DBPool *dbpool_create(int max, bool async);
 
 /**
- * Encerra o pool de conexões.
+ * Destroi o pool de conexões, fechando todas as conexões ativas e liberando
+ * toda a memória utilizada pelo pool.
  */
-void db_closePool();
+void dbpool_destroy(DBPool *dbpool);
 
 /**
- * Obtém uma conexão do pool de conexões.
+ * Obtém uma conexão do pool.
  *
  * @return conexão com o banco de dados.
  */
-DB *db_open();
+DB *dbpool_get(DBPool *dbpool);
 
+/**
+ * Desfaz tudo o que ocorreu no bloco da transação atual e inicia uma nova
+ * transação.
+ */
 int db_rollback(DB *db);
 
+/**
+ * Efetiva tudo o que ocorreu no bloco da transação atual e inicia uma nova
+ * transação.
+ */
 int db_commit(DB *db);
 
 /**
- * Devolve uma conexão para o pool de conexões.
+ * Efetiva tudo o que ocorreu no block da transação atual e, se a conexão foi
+ * obtida de um pool, logo a conexão será mantida aberta, sendo apenas devolvida
+ * ao pool. Se a conexão não foi obtida de um pool, logo a conexão será fechada
+ * imediatamente.
  *
  * @param db conexão a ser devolvida.
  */
 void db_close(DB *db);
 
 /**
- * Configura o comando sql a ser enviado.
+ * Configura o comando sql a ser executado quando db_send() ou db_exec() for
+ * chamado.
  *
  * @param db  conexão com o banco de dados.
  * @param sql comando sql.
@@ -69,7 +85,8 @@ void db_close(DB *db);
 void db_sql(DB *db, const char *sql);
 
 /**
- * Libera todos os recursos utilizados pelo comando sql.
+ * Libera toda a memória utilizada na execução do comando sql, após as chamadas
+ * das funções db_send()  ou db_exec().
  *
  * @param db conexão com o banco de dados.
  */
@@ -85,7 +102,7 @@ void db_param(DB *db, const char *value);
 void db_paramInt(DB *db, int value);
 
 /**
- * Envia o comando sql para o banco de dados. Esta função deve ser sempre
+ * Executa o comando sql de forma assíncrona. Esta função deve ser sempre
  * chamada após a configuração da sql, com a função db_sql() e após a
  * configurações dos parâmetros da sql, se houver, com a função db_param().
  *
@@ -95,7 +112,13 @@ void db_paramInt(DB *db, int value);
  */
 void db_send(DB *db, void *context, onDBCallback onCmdResult);
 
-
+/**
+ * Envia o comando sql de forma síncrona. Esta função deve ser sempre
+ * chamada após a configuração da sql, com a função db_sql() e após a
+ * configurações dos parâmetros da sql, se houver, com a função db_param().
+ *
+ * @param db          conexão com banco de dados.
+ */
 int db_exec(DB *db);
 
 /**

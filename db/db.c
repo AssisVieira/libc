@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "log/log.h"
+#include "queue/queue.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -46,86 +47,94 @@ struct DB {
   const char *params[DB_SQL_PARAMS_MAX];
   size_t paramsLen;
   PGresult *result;
-  bool idle;
   bool error;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 typedef struct DBPool {
-  DB *dbs;
-  size_t min;
-  size_t max;
-  bool debug;
+  Queue *dbs;
+  int min;
+  int max;
+  char *strConn;
+  bool async;
 } DBPool;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static DBPool pool = {
-    .dbs = NULL,
-    .min = 0,
-    .max = 0,
-    .debug = true,
-};
+DBPool *db_pool_create(const char *strConn, bool async, int min, int max) {
+  DBPool *pool = malloc(sizeof(DBPool));
+  pool->dbs = queue_create(max);
+  pool->min = min;
+  pool->max = max;
+  pool->async = async;
+  pool->strConn = strdup(strConn);
+
+  for (int i = 0; i < min; i++) {
+    DB *db = db_open(strConn, async);
+    if (db != NULL) {
+      queue_add(pool->dbs, db);
+    }
+  }
+
+  log_info("db", "Pool created: %d min, %d max.\n", min, max);
+
+  return pool;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int db_openPool(int min, int max, bool async) {
-  pool.min = min;
-  pool.max = max;
+DBPool *db_pool_destrou(DBPool *pool) {
+  queue_destroy(pool->)
 
-  char *strConn = getenv("DB_STRING_CONNECTION");
+  return pool;
+}
 
-  if (strConn == NULL || strlen(strConn) == 0) {
-    log_erro("db",
-             "Variável de ambiente não definida: DB_STRING_CONNECTION. "
-             "Exemplo: export DB_STRING_CONNECTION=\"host=127.0.0.1 port=5432 "
-             "user=assis password=assis dbname=assis sslmode=require\"\n");
-    return -1;
-  }
+////////////////////////////////////////////////////////////////////////////////
 
-  log_info("db", "Inicializando pool. Minímo ociosas: %d. Máximo ativas: %d\n",
-           min, max);
-
-  pool.dbs = malloc(sizeof(DB) * max);
-
-  for (int i = 0; i < max; i++) {
-    pool.dbs[i].context = NULL;
-    pool.dbs[i].onCmdResult = NULL;
-    pool.dbs[i].paramsLen = 0;
-    pool.dbs[i].result = NULL;
-    pool.dbs[i].sql = NULL;
-    pool.dbs[i].idle = true;
-    pool.dbs[i].conn = NULL;
-    pool.dbs[i].error = false;
-  }
-
-  for (int i = 0; i < min; i++) {
-    DB *db = &pool.dbs[i];
-
-    db->conn = PQconnectdb(strConn);
-
-    if (PQstatus(db->conn) != CONNECTION_OK) {
-      log_erro("db", "Erro ao abrir conexão no slot %d: %s.\n", i, PQerrorMessage(db->conn));
+DB * db_open(const char *strConn, bool async) {
+  if (strConn == NULL) {
+    strConn = getenv("DB_STRING_CONNECTION");
+    if (strConn == NULL || strlen(strConn) == 0) {
+      log_erro("db",
+              "Variável de ambiente não definida: DB_STRING_CONNECTION. "
+              "Exemplo: export DB_STRING_CONNECTION=\"host=xxx port=xxx "
+              "user=xxx password=xxx dbname=xxx sslmode=require\"\n");
       return -1;
     }
+  }
 
-    if (async) {
-      if (PQsetnonblocking(db->conn, 1) != 0) {
-        log_erro("db", "PQsetnonblocking().\n");
-        db_destroy(db);
-        return -1;
-      }
+  DB *db = malloc(sizeof(DB));
+  db->context = NULL;
+  db->onCmdResult = NULL;
+  db->paramsLen = 0;
+  db->result = NULL;
+  db->sql = NULL;
+  db->conn = NULL;
+  db->error = false;
+  db->conn = PQconnectdb(strConn);
 
-      if (io_add(io_current(), PQsocket(db->conn), IO_READ, db, db_onEventQuery)) {
-        log_erro("db", "io_add().\n");
-        db_destroy(db);
-        return -1;
-      }
+  if (PQstatus(db->conn) != CONNECTION_OK) {
+    log_erro("db", "PQconnectdb() - %s\n", PQerrorMessage(db->conn));
+    db_destroy(db);
+    return NULL;
+  }
+
+  if (async) {
+    if (PQsetnonblocking(db->conn, 1) != 0) {
+      log_erro("db", "PQsetnonblocking().\n");
+      db_destroy(db);
+      return NULL;
+    }
+
+    if (io_add(io_current(), PQsocket(db->conn), IO_READ, db, db_onEventQuery)) {
+      log_erro("db", "io_add().\n");
+      db_destroy(db);
+      return NULL;
     }
   }
 
-  return 0;
+  return db;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

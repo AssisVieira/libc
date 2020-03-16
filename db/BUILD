@@ -18,10 +18,10 @@ load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 cc_library(
     name = "db",
-    srcs = glob(["*.c", "*.h"], exclude = ["*test.c"]),
+    srcs = glob(["*.c", "*.h"], exclude = ["*test.c", "test*.c"]),
     hdrs = glob(["*.h"]),
     visibility = ["//visibility:public"],
-    deps = ["//log", "//io"],
+    deps = ["//log", "//io", "//queue"],
     linkopts = ["-lpq"]
 )
 
