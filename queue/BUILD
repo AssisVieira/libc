@@ -17,20 +17,20 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 cc_library(
-    name = "ring",
+    name = "queue",
     srcs = [
-        "ring.c",
-        "ring.h",
+        "queue.c",
+        "queue.h",
     ],
-    hdrs = ["ring.h"],
+    hdrs = ["queue.h"],
     linkopts = ["-pthread"],
     visibility = ["//visibility:public"]
 )
 
 cc_test(
     name = "test",
-    srcs = ["ring.c"],
+    srcs = ["queue.c"],
     visibility = ["//visibility:public"],
-    deps = [":ring"]
+    deps = [":queue"]
 )
 
