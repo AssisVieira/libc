@@ -143,16 +143,22 @@ void db_pool_destroy(DBPool *pool) {
 ////////////////////////////////////////////////////////////////////////////////
 
 DB *db_open(const char *strConn, bool async) {
+  if (strConn == NULL) return NULL;
+
   DB *db = db_open_intern(strConn, async, NULL);
+  
   if (db_begin(db)) {
     return NULL;
   }
+
   return db;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static DB *db_open_intern(const char *strConn, bool async, DBPool *pool) {
+  if (strConn == NULL) return NULL;
+
   DB *db = malloc(sizeof(DB));
   db->context = NULL;
   db->onCmdResult = NULL;
@@ -199,10 +205,7 @@ void db_sql(DB *db, const char *sql) {
 
 void db_param(DB *db, const char *value) {
   if (db == NULL) return;
-  size_t size = strlen(value) + 1;
-  char *buff = malloc(size);
-  memcpy(buff, value, size);
-  db->params[db->paramsLen++] = buff;
+  db->params[db->paramsLen++] = strdup(value);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
