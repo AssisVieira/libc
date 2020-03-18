@@ -26,17 +26,24 @@
 #include "queue/queue.h"
 
 ////////////////////////////////////////////////////////////////////////////////
-
-static void db_onEventQuery(void *context, int fd, IOEvent event);
-static void db_destroy(DB *db);
-static int db_begin(DB *db);
-static int db_commit2(DB *db, bool chained);
-
+/// DEFINES ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
 #define PG_FORMAT_TEXT 0
 #define PG_FORMAT_BIN 1
 
+////////////////////////////////////////////////////////////////////////////////
+/// PROTOTYPES /////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+static void db_onEventQuery(void *context, int fd, IOEvent event);
+static void db_destroy(DB *db);
+static int db_begin(DB *db);
+static int db_commit_intern(DB *db, bool chained);
+static DB *db_open_intern(const char *strConn, bool async, DBPool *pool);
+
+////////////////////////////////////////////////////////////////////////////////
+/// TYPES //////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
 struct DB {
@@ -48,6 +55,7 @@ struct DB {
   size_t paramsLen;
   PGresult *result;
   bool error;
+  DBPool *pool;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -56,10 +64,13 @@ typedef struct DBPool {
   Queue *dbs;
   int min;
   int max;
+  volatile int busy;
   char *strConn;
   bool async;
 } DBPool;
 
+////////////////////////////////////////////////////////////////////////////////
+/// DB POOL ////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
 DBPool *db_pool_create(const char *strConn, bool async, int min, int max) {
@@ -71,7 +82,7 @@ DBPool *db_pool_create(const char *strConn, bool async, int min, int max) {
   pool->strConn = strdup(strConn);
 
   for (int i = 0; i < min; i++) {
-    DB *db = db_open(strConn, async);
+    DB *db = db_open_intern(strConn, async, pool);
     if (db != NULL) {
       queue_add(pool->dbs, db);
     }
@@ -84,26 +95,64 @@ DBPool *db_pool_create(const char *strConn, bool async, int min, int max) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DBPool *db_pool_destrou(DBPool *pool) {
-  queue_destroy(pool->)
+DB *db_pool_get(DBPool *pool) {
+  DB *db = queue_get(pool->dbs);
 
-  return pool;
+  if (db == NULL) {
+    do {
+      const int oldBusy = pool->busy;
+
+      if (oldBusy >= pool->max) break;
+
+      if (__sync_bool_compare_and_swap(&pool->busy, oldBusy, oldBusy + 1)) {
+        db = db_open_intern(pool->strConn, pool->async, pool);
+        break;
+      }
+    } while (true);
+  }
+
+  if (db != NULL) {
+    __sync_fetch_and_add(&pool->busy, 1);
+  }
+
+  if (db_begin(db)) {
+    return NULL;
+  }
+
+  return db;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DB * db_open(const char *strConn, bool async) {
-  if (strConn == NULL) {
-    strConn = getenv("DB_STRING_CONNECTION");
-    if (strConn == NULL || strlen(strConn) == 0) {
-      log_erro("db",
-              "Variável de ambiente não definida: DB_STRING_CONNECTION. "
-              "Exemplo: export DB_STRING_CONNECTION=\"host=xxx port=xxx "
-              "user=xxx password=xxx dbname=xxx sslmode=require\"\n");
-      return -1;
-    }
+void db_pool_destroy(DBPool *pool) {
+  DB *db = NULL;
+
+  if (pool == NULL) return;
+
+  while ((db = queue_get(pool->dbs)) != NULL) {
+    db_destroy(db);
   }
 
+  queue_destroy(pool->dbs);
+  free(pool->strConn);
+  free(pool);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// DB /////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+DB *db_open(const char *strConn, bool async) {
+  DB *db = db_open_intern(strConn, async, NULL);
+  if (db_begin(db)) {
+    return NULL;
+  }
+  return db;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static DB *db_open_intern(const char *strConn, bool async, DBPool *pool) {
   DB *db = malloc(sizeof(DB));
   db->context = NULL;
   db->onCmdResult = NULL;
@@ -127,7 +176,8 @@ DB * db_open(const char *strConn, bool async) {
       return NULL;
     }
 
-    if (io_add(io_current(), PQsocket(db->conn), IO_READ, db, db_onEventQuery)) {
+    if (io_add(io_current(), PQsocket(db->conn), IO_READ, db,
+               db_onEventQuery)) {
       log_erro("db", "io_add().\n");
       db_destroy(db);
       return NULL;
@@ -135,57 +185,6 @@ DB * db_open(const char *strConn, bool async) {
   }
 
   return db;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void db_closePool() {
-  for (int i = 0; i < pool.max; i++) {
-    if (pool.dbs[i].conn != NULL) {
-      db_destroy(&pool.dbs[i]);
-    }
-  }
-
-  free(pool.dbs);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-DB *db_open() {
-  DB *db = NULL;
-  int nIdle = 0;
-
-  for (int i = 0; i < pool.max; i++) {
-    if (!pool.dbs[i].idle) {
-      continue;
-    }
-
-    if (PQstatus(pool.dbs[i].conn) != CONNECTION_OK) {
-      log_info("db", "connection %d: %d\n", i, PQstatus(pool.dbs[i].conn));
-      continue;
-    }
-
-    db = &pool.dbs[i];
-
-    nIdle++;
-    // break;
-  }
-
-  log_info("db", "Obtendo conexão, restando: %d de %d.\n", nIdle - 1, pool.max);
-
-  if (db != NULL) {
-    db->idle = false;
-    
-    if (db_begin(db)) {
-      return NULL;
-    }
-
-    return db;
-  }
-
-  log_warn("db", "Sem conexão disponível.\n");
-
-  return NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -223,21 +222,25 @@ void *db_context(DB *db) {
   return db->context;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 void db_clear(DB *db) {
   if (db == NULL) return;
+
   while (db->result != NULL) {
     PQclear(db->result);
     db->result = PQgetResult(db->conn);
   }
-  db->sql = NULL;
 
   for (int i = 0; i < db->paramsLen; i++) {
     free((void *)db->params[i]);
   }
 
+  db->sql = NULL;
   db->paramsLen = 0;
-
   db->onCmdResult = NULL;
+  db->context = NULL;
+  db->error = false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -257,13 +260,11 @@ int db_rollback(DB *db) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int db_commit(DB *db) {
-  return db_commit2(db, true);
-}
+int db_commit(DB *db) { return db_commit_intern(db, true); }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static int db_commit2(DB *db, bool chained) {
+static int db_commit_intern(DB *db, bool chained) {
   db_sql(db, "COMMIT");
   if (db_exec(db)) {
     log_erro("db", "commit fail.\n");
@@ -293,35 +294,14 @@ static int db_begin(DB *db) {
 void db_close(DB *db) {
   if (db == NULL) return;
 
-  db_commit2(db, false);
+  db_commit_intern(db, false);
 
   db_clear(db);
 
-  db->context = NULL;
-  db->onCmdResult = NULL;
-  db->paramsLen = 0;
-  db->sql = NULL;
-  db->idle = true;
-  db->error = false;
-
-  if (pool.debug) {
-    int nIdle = 0;
-    for (int i = 0; i < pool.max; i++) {
-      if (!pool.dbs[i].idle) {
-        continue;
-      }
-
-      if (PQstatus(pool.dbs[i].conn) != CONNECTION_OK) {
-        continue;
-      }
-
-      nIdle++;
-      // break;
+  if (db->pool != NULL) {
+    if (!queue_add(db->pool->dbs, db)) {
+      db_destroy(db);
     }
-    log_dbug("db", "Devolvendo conexão, restando: %d de %d.\n", nIdle,
-             pool.max);
-  } else {
-    log_dbug("db", "Devolvendo conexão.\n");
   }
 }
 
@@ -329,16 +309,9 @@ void db_close(DB *db) {
 
 static void db_destroy(DB *db) {
   if (db == NULL) return;
-
   db_clear(db);
   PQfinish(db->conn);
-  db->conn = NULL;
-  db->context = NULL;
-  db->onCmdResult = NULL;
-  db->paramsLen = 0;
-  db->sql = NULL;
-  db->idle = true;
-  db->error = false;
+  free(db);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -370,9 +343,10 @@ int db_exec(DB *db) {
   log_dbug("db", "%s;\n", db->sql);
 
   db->result = PQexecParams(db->conn, db->sql, db->paramsLen, NULL, db->params,
-                         NULL, NULL, PG_FORMAT_TEXT);
+                            NULL, NULL, PG_FORMAT_TEXT);
 
-  if (PQresultStatus(db->result) != PGRES_TUPLES_OK && PQresultStatus(db->result) != PGRES_COMMAND_OK) {
+  if (PQresultStatus(db->result) != PGRES_TUPLES_OK &&
+      PQresultStatus(db->result) != PGRES_COMMAND_OK) {
     log_erro("db", "%s", PQerrorMessage(db->conn));
     db->error = true;
     return -1;
@@ -437,4 +411,3 @@ static void db_onEventQuery(void *context, int fd, IOEvent event) {
 ////////////////////////////////////////////////////////////////////////////////
 
 bool db_error(DB *db) { return (db == NULL || db->error); }
-

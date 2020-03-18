@@ -14,7 +14,7 @@
 #   limitations under the License.
 ################################################################################
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_binary", "cc_test")
 
 cc_library(
     name = "db",
@@ -25,7 +25,6 @@ cc_library(
     linkopts = ["-lpq"]
 )
 
-
 cc_test(
     name = "testAsync",
     srcs = ["testAsync.c"],
@@ -34,12 +33,13 @@ cc_test(
     visibility = ["//visibility:public"]
 )
 
-cc_test(
+cc_binary(
     name = "test",
-    srcs = ["test.c"],
+    srcs = ["db.h", "db.c", "test.c"],
     linkstatic = True,
-    deps = [":db"],
-    visibility = ["//visibility:public"]
+    visibility = ["//visibility:public"],
+    deps = ["//log", "//io", "//queue"],
+    linkopts = ["-lpq"]
 )
 
 cc_test(

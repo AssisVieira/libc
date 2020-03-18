@@ -32,26 +32,36 @@ typedef struct DBPool DBPool;
 /**
  * Cria um o pool de conexões.
  *
- * @param  max   quantidade máxima de conexões ativas.
- * @param  async true, se as conexões devem ser assíncronas, false, caso
- * contrário.
- * @return       uma instancia de pool de conexões, em caso de sucesso, NULL, em
- * caso de erro.
+ * @param  strConn  string de conexão.
+ * @param  async    true, se as conexões devem ser assíncronas, false, caso
+ *                  contrário.
+ * @param  max      quantidade máxima de conexões ativas.
+ * @param  min      quantidade mínima de conexões ativas.
+ * @return          uma instancia de pool de conexões, em caso de sucesso, NULL,
+ *                  em caso de erro.
  */
-DBPool *dbpool_create(int max, bool async);
+DBPool *db_pool_create(const char *strConn, bool async, int min, int max);
 
 /**
  * Destroi o pool de conexões, fechando todas as conexões ativas e liberando
  * toda a memória utilizada pelo pool.
  */
-void dbpool_destroy(DBPool *dbpool);
+void db_pool_destroy(DBPool *dbpool);
 
 /**
  * Obtém uma conexão do pool.
  *
  * @return conexão com o banco de dados.
  */
-DB *dbpool_get(DBPool *dbpool);
+DB *db_pool_get(DBPool *dbpool);
+
+/**
+ * Cria uma conexão com um banco de dados.
+ *
+ * @param  strConn  string de conexão.
+ * @param  async    true, se a conexão deve ser assíncrona, false, caso contrário.
+ */
+DB *db_open(const char *strConn, bool async);
 
 /**
  * Desfaz tudo o que ocorreu no bloco da transação atual e inicia uma nova
@@ -69,7 +79,7 @@ int db_commit(DB *db);
  * Efetiva tudo o que ocorreu no block da transação atual e, se a conexão foi
  * obtida de um pool, logo a conexão será mantida aberta, sendo apenas devolvida
  * ao pool. Se a conexão não foi obtida de um pool, logo a conexão será fechada
- * imediatamente.
+ * imediatamente, liberando toda a memória usada pela conexão.
  *
  * @param db conexão a ser devolvida.
  */
@@ -86,7 +96,7 @@ void db_sql(DB *db, const char *sql);
 
 /**
  * Libera toda a memória utilizada na execução do comando sql, após as chamadas
- * das funções db_send()  ou db_exec().
+ * das funções db_send() ou db_exec().
  *
  * @param db conexão com o banco de dados.
  */

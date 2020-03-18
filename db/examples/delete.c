@@ -14,36 +14,27 @@
  *   limitations under the License.
  ******************************************************************************/
 
-#include "db.h"
-#include "log/log.h"
+#include "db/db.h"
 #include <stdio.h>
 #include <string.h>
 
 int main() {
-  if (db_openPool(5, 10, false)) {
-    perror("db_openPool().\n");
-    return -1;
+  const char strConn[] = "postgresql://assis:assis@127.0.0.1:5432/assis";
+  const int idPeople = 10;
+  DB *db = NULL;  
+
+  db = db_open(strConn, false);
+
+  db_sql(db, "delete from people where id = $1::integer");
+  db_paramInt(db, idPeople);
+  
+  if (db_exec(db)) {
+    perror("error: db_exec().\n");
+  } else {
+    printf("Row deleted!\n");
   }
 
-  DB *db = db_open();
-
-  assert(db != NULL);
-
-  db_sql(db, "insert into people (name, email) values ($1::text, $2::text)");
-  db_param(db, "John");
-  db_param(db, "john@john.com");
-  assert(db_exec(db) == 0);
-
-  db_sql(db, "select name, email from people limit 1");
-  assert(db_exec(db) == 0);
-
-  assert( db_count(db) == 1 );
-  assert( strcmp(db_value(db, 0, 0), "John") == 0 );
-  assert( strcmp(db_value(db, 0, 1), "john@john.com") == 0 );
-
   db_close(db);
-
-  db_closePool();
-
+  
   return 0;
 }

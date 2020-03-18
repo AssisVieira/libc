@@ -14,43 +14,35 @@
  *   limitations under the License.
  ******************************************************************************/
 
-#include "db.h"
-#include "log/log.h"
+#include "db/db.h"
 #include <stdio.h>
 #include <string.h>
 
 int main() {
-  if (db_openPool(5, 10, false)) {
-    perror("Falha ao abrir o pool.\n");
-    return -1;
-  }
+  const char strConn[] = "postgresql://assis:assis@127.0.0.1:5432/assis";
+  const int iColId = 0;
+  const int iColName = 1;
+  const int iColEmail = 2;
+  DB *db = NULL;  
 
-  DB *db = db_open();
-
-  assert(db != NULL);
-
-  db_sql(db, "delete from people");
-  db_exec(db);
-  db_commit(db);
-
-  db_sql(db, "delete from people");
-  assert(db_exec(db) == 0);
-
-  db_sql(db, "insert into people (name, email) values ($1::text, $2::text)");
-  db_param(db, "John");
-  db_param(db, "john@john.com");
-  assert(db_exec(db) == 0);
-
-  db_rollback(db);
+  db = db_open(strConn, false);
 
   db_sql(db, "select id, name, email from people");
-  assert(db_exec(db) == 0);
+  
+  if (db_exec(db)) {
+    perror("error: db_exec().\n");
+  } else {
+    printf("Total: %d\n", db_count(db));
 
-  assert(db_count(db) == 0);
+    for (int iRow = 0; iRow < db_count(db); iRow++) {
+      printf("id: %s\n", db_value(db, iRow, iColId));
+      printf("name: %s\n", db_value(db, iRow, iColName));
+      printf("e-mail: %s\n", db_value(db, iRow, iColEmail));
+      printf("---\n");
+    }
+  }
 
   db_close(db);
-
-  db_closePool();
-
+  
   return 0;
 }
