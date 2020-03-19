@@ -17,20 +17,20 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 
 cc_library(
-    name = "queue",
+    name = "queue_ss",
     srcs = [
-        "queue.c",
-        "queue.h",
+        "queue_ss.c",
+        "queue_ss.h",
     ],
-    hdrs = ["queue.h"],
+    hdrs = ["queue_ss.h"],
     linkopts = ["-pthread"],
     visibility = ["//visibility:public"]
 )
 
 cc_test(
-    name = "test",
-    srcs = ["queue.c"],
+    name = "queue_ss_test",
+    srcs = ["queue_ss_test.c"],
     visibility = ["//visibility:public"],
-    deps = [":queue"]
+    deps = [":queue_ss"]
 )
 
