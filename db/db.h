@@ -35,8 +35,8 @@ typedef struct DBPool DBPool;
  * @param  strConn  string de conexão.
  * @param  async    true, se as conexões devem ser assíncronas, false, caso
  *                  contrário.
- * @param  max      quantidade máxima de conexões ativas.
- * @param  min      quantidade mínima de conexões ativas.
+ * @param  max      quantidade máxima de conexões ocupadas.
+ * @param  min      quantidade mínima de conexões ociosas.
  * @return          uma instancia de pool de conexões, em caso de sucesso, NULL,
  *                  em caso de erro.
  */
@@ -59,7 +59,8 @@ DB *db_pool_get(DBPool *dbpool);
  * Cria uma conexão com um banco de dados.
  *
  * @param  strConn  string de conexão.
- * @param  async    true, se a conexão deve ser assíncrona, false, caso contrário.
+ * @param  async    true, se a conexão deve ser assíncrona, false, caso
+ * contrário.
  */
 DB *db_open(const char *strConn, bool async);
 
@@ -166,5 +167,21 @@ int db_count(DB *db);
  * @return   true, em caso de erro no comando sql, false, caso contrário.
  */
 bool db_error(DB *db);
+
+/**
+ * Obtém o número de conexões do pool que estão ocupadas.
+ * Isto é, a quantidade de conexões que foram obtidas com db_pool_get() e ainda
+ * não foram devolvidas com db_close(). O número de conexões ocupadas não deve
+ * ser maior que a capacidade máxima fornecida no momento da construção do pool,
+ * com a função db_pool_create().
+ */
+int db_pool_num_busy(const DBPool *pool);
+
+/**
+ * Obtém o número de conexões do pool que estão ociosas.
+ * Isto é, a quantidade de conexões que estão no pool a espera de serem obtidas
+ * com db_pool_get().
+ */
+int db_pool_num_idle(const DBPool *pool);
 
 #endif

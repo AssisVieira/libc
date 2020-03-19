@@ -65,6 +65,7 @@ typedef struct DBPool {
   int min;
   int max;
   volatile int busy;
+  volatile int idle;
   char *strConn;
   bool async;
 } DBPool;
@@ -78,17 +79,21 @@ DBPool *db_pool_create(const char *strConn, bool async, int min, int max) {
   pool->dbs = queue_create(max);
   pool->min = min;
   pool->max = max;
+  pool->busy = 0;
+  pool->idle = 0;
   pool->async = async;
   pool->strConn = strdup(strConn);
 
   for (int i = 0; i < min; i++) {
     DB *db = db_open_intern(strConn, async, pool);
     if (db != NULL) {
-      queue_add(pool->dbs, db);
+      if (queue_add(pool->dbs, db)) {
+        pool->idle++;
+      }
     }
   }
 
-  log_info("db", "Pool created: %d min, %d max.\n", min, max);
+  log_info("db", "db_pool_create(): %d idle, %d busy.\n", pool->idle, pool->busy);
 
   return pool;
 }
@@ -98,7 +103,10 @@ DBPool *db_pool_create(const char *strConn, bool async, int min, int max) {
 DB *db_pool_get(DBPool *pool) {
   DB *db = queue_get(pool->dbs);
 
-  if (db == NULL) {
+  if (db != NULL) {
+    __sync_fetch_and_sub(&pool->idle, 1);
+    __sync_fetch_and_add(&pool->busy, 1);
+  } else {
     do {
       const int oldBusy = pool->busy;
 
@@ -109,10 +117,6 @@ DB *db_pool_get(DBPool *pool) {
         break;
       }
     } while (true);
-  }
-
-  if (db != NULL) {
-    __sync_fetch_and_add(&pool->busy, 1);
   }
 
   if (db_begin(db)) {
@@ -146,7 +150,7 @@ DB *db_open(const char *strConn, bool async) {
   if (strConn == NULL) return NULL;
 
   DB *db = db_open_intern(strConn, async, NULL);
-  
+
   if (db_begin(db)) {
     return NULL;
   }
@@ -168,6 +172,7 @@ static DB *db_open_intern(const char *strConn, bool async, DBPool *pool) {
   db->conn = NULL;
   db->error = false;
   db->conn = PQconnectdb(strConn);
+  db->pool = pool;
 
   if (PQstatus(db->conn) != CONNECTION_OK) {
     log_erro("db", "PQconnectdb() - %s\n", PQerrorMessage(db->conn));
@@ -302,9 +307,21 @@ void db_close(DB *db) {
   db_clear(db);
 
   if (db->pool != NULL) {
-    if (!queue_add(db->pool->dbs, db)) {
-      db_destroy(db);
-    }
+    __sync_fetch_and_sub(&db->pool->busy, 1);
+    do {
+      int oldIdle = db->pool->idle;
+
+      if (oldIdle < db->pool->min) {
+        if (__sync_bool_compare_and_swap(&db->pool->idle, oldIdle,
+                                         oldIdle + 1)) {
+          queue_add(db->pool->dbs, db);
+          break;
+        }
+      } else {
+        db_destroy(db);
+        break;
+      }
+    } while (true);
   }
 }
 
@@ -414,3 +431,11 @@ static void db_onEventQuery(void *context, int fd, IOEvent event) {
 ////////////////////////////////////////////////////////////////////////////////
 
 bool db_error(DB *db) { return (db == NULL || db->error); }
+
+////////////////////////////////////////////////////////////////////////////////
+
+int db_pool_num_busy(const DBPool *pool) { return pool->busy; }
+
+////////////////////////////////////////////////////////////////////////////////
+
+int db_pool_num_idle(const DBPool *pool) { return pool->idle; }
