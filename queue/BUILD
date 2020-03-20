@@ -34,3 +34,21 @@ cc_test(
     deps = [":queue_ss"]
 )
 
+cc_library(
+    name = "queue",
+    srcs = [
+        "queue.c",
+        "queue.h",
+    ],
+    hdrs = ["queue.h"],
+    linkopts = ["-pthread"],
+    visibility = ["//visibility:public"]
+)
+
+cc_test(
+    name = "queue_test",
+    srcs = ["queue_test.c"],
+    visibility = ["//visibility:public"],
+    deps = [":queue"]
+)
+
