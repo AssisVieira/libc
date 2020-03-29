@@ -21,19 +21,16 @@
 #include <string.h>
 #include <threads.h>
 
-#define assert(X)                             \
-  if (!(X)) {                                 \
-    fprintf(stderr, "assert fail: %s\n", #X); \
-    exit(-1);                                 \
+#define assert(X)                                                     \
+  if (!(X)) {                                                         \
+    fprintf(stderr, "assert fail: %s in %s():%d\n", #X, __FUNCTION__, \
+            __LINE__);                                                \
+    exit(-1);                                                         \
   }
 
-// #define DEBUG
+#define DEBUG
 
 static void testCreate() {
-  {
-    Queue *queue = queue_create(-1);
-    assert(queue == NULL);
-  }
   {
     Queue *queue = queue_create(0);
     assert(queue == NULL);
@@ -41,7 +38,6 @@ static void testCreate() {
   {
     Queue *queue = queue_create(1);
     assert(queue != NULL);
-    assert(queue_count(queue) == 0);
     queue_destroy(queue);
   }
 }
@@ -49,17 +45,11 @@ static void testCreate() {
 static void testAdd() {
   Queue *queue = queue_create(3);
 
-  assert(queue_add(queue, "a") == true);
-  assert(queue_count(queue) == 1);
+  queue_add(queue, "a");
 
-  assert(queue_add(queue, "b") == true);
-  assert(queue_count(queue) == 2);
+  queue_add(queue, "b");
 
-  assert(queue_add(queue, "c") == true);
-  assert(queue_count(queue) == 3);
-
-  // assert(queue_add(queue, "d") == false);
-  // assert(queue_count(queue) == 3);
+  queue_add(queue, "c");
 
   queue_destroy(queue);
 }
@@ -67,21 +57,12 @@ static void testAdd() {
 static void testGet() {
   Queue *queue = queue_create(3);
 
-  // assert(queue_get(queue) == NULL);
-  assert(queue_count(queue) == 0);
-
-  assert(queue_add(queue, "a") == true);
-  assert(queue_add(queue, "b") == true);
-  assert(queue_count(queue) == 2);
+  queue_add(queue, "a");
+  queue_add(queue, "b");
 
   assert(strcmp(queue_get(queue), "a") == 0);
-  assert(queue_count(queue) == 1);
 
   assert(strcmp(queue_get(queue), "b") == 0);
-  assert(queue_count(queue) == 0);
-
-  // assert(queue_get(queue) == NULL);
-  // assert(queue_count(queue) == 0);
 
   queue_destroy(queue);
 }
@@ -89,6 +70,9 @@ static void testGet() {
 static int testFastConsumer(void *arg) {
   Queue *queue = arg;
   char *item = NULL;
+#ifdef DEBUG
+  size_t count = 0;
+#endif
 
   while (true) {
     item = queue_get(queue);
@@ -98,7 +82,7 @@ static int testFastConsumer(void *arg) {
     free(item);
 
 #ifdef DEBUG
-    fprintf(stdout, "[consumer] (count=%d)\n", queue_count(queue));
+    fprintf(stdout, "[consumer] (count=%ld)\n", count++);
     fflush(stdout);
 #endif
   }
@@ -107,7 +91,7 @@ static int testFastConsumer(void *arg) {
   free(item);
 
 #ifdef DEBUG
-  fprintf(stdout, "[consumer] (count=%d) END!\n", queue_count(queue));
+  fprintf(stdout, "[consumer] (count=%ld) END!\n", count++);
   fflush(stdout);
 #endif
 
@@ -137,6 +121,9 @@ static int testSlowConsumer(void *arg) {
 
 static int testSlowProducer(void *arg) {
   Queue *queue = arg;
+#ifdef DEBUG
+  size_t count = 0;
+#endif
 
   for (int i = 0; i < 10000; i++) {
     // sleep 0.1ms
@@ -145,13 +132,13 @@ static int testSlowProducer(void *arg) {
     queue_add(queue, strdup("abc"));
 
 #ifdef DEBUG
-    fprintf(stdout, "[producer] (count=%d) i = %d\n", queue_count(queue), i);
+    fprintf(stdout, "[producer] (count=%ld) i = %d\n", count++, i);
     fflush(stdout);
 #endif
   }
 
 #ifdef DEBUG
-  fprintf(stdout, "[producer] (count=%d) END!\n", queue_count(queue));
+  fprintf(stdout, "[producer] (count=%ld) END!\n", count++);
   fflush(stdout);
 #endif
 
@@ -160,17 +147,20 @@ static int testSlowProducer(void *arg) {
 
 static int testFastProducer(void *arg) {
   Queue *queue = arg;
+#ifdef DEBUG
+  size_t count = 0;
+#endif
 
   for (int i = 0; i < 10000; i++) {
     queue_add(queue, strdup("abc"));
 #ifdef DEBUG
-    fprintf(stdout, "[producer] (count=%d) i = %d\n", queue_count(queue), i);
+    fprintf(stdout, "[producer] (count=%ld) i = %d\n", count++, i);
     fflush(stdout);
 #endif
   }
 
 #ifdef DEBUG
-  fprintf(stdout, "[producer] (count=%d) END!\n", queue_count(queue));
+  fprintf(stdout, "[producer] (count=%ld) END!\n", count++);
   fflush(stdout);
 #endif
 
@@ -193,8 +183,6 @@ static void testSingleProducerSingleConsumer(int (*fnProducer)(void *),
 
   thrd_join(tConsumer, NULL);
 
-  assert(queue_count(queue) == 0);
-
   queue_destroy(queue);
 }
 
@@ -216,8 +204,6 @@ static void testManyProducerSingleConsumer(int (*fnProducer)(void *),
   queue_add(queue, item);
 
   thrd_join(tConsumer, NULL);
-
-  assert(queue_count(queue) == 0);
 
   queue_destroy(queue);
 }
@@ -243,8 +229,6 @@ static void testSingleProducerManyConsumer(int (*fnProducer)(void *),
 
   thrd_join(tConsumer1, NULL);
   thrd_join(tConsumer2, NULL);
-
-  assert(queue_count(queue) == 0);
 
   queue_destroy(queue);
 }
@@ -273,8 +257,6 @@ static void testManyProducerManyConsumer(int (*fnProducer)(void *),
 
   thrd_join(tConsumer1, NULL);
   thrd_join(tConsumer2, NULL);
-
-  assert(queue_count(queue) == 0);
 
   queue_destroy(queue);
 }

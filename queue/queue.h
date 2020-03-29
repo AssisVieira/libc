@@ -18,33 +18,34 @@
 #define QUEUE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef struct Queue Queue;
 
 /**
- * Creates a queue that supports only many producers and many consumers.
+ * Creates a bounded queue that supports many producers and many consumers.
+ * This implementation uses only one mutex to synchronize the add and get
+ * operations.
  *
- * @param count maximum number of items in the queue.
+ * @param max maximum number of items in the queue.
  */
-Queue *queue_create(int max);
+Queue *queue_create(size_t max);
 
 /**
  * Adds a item in the end of the queue. This queue support many producers.
+ * If the queue is full, the call will be blocked until a item be removed.
  */
-bool queue_add(Queue *queue, void *item);
+void queue_add(Queue *queue, void *item);
 
 /**
- * Gets the first item of the queue. This queue support many consumers.
+ * Gets and removes the first item in the queue. This queue support many
+ * consumers. If the queue is empty, the call will be blocked until a item be
+ * added.
  */
 void *queue_get(Queue *queue);
 
 /**
- * Gets the number of queue items.
- */
-int queue_count(Queue *queue);
-
-/**
- * Destroys the queue freeing the used memory, but not the items.
+ * Destroys the queue freeing the used memory, except the added items.
  */
 void queue_destroy(Queue *queue);
 

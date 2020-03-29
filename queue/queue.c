@@ -14,30 +14,52 @@
  *   limitations under the License.
  ******************************************************************************/
 
-#include "queue_ss.h"
+#include "queue.h"
 
 #include <assert.h>
 #include <limits.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <threads.h>
 
-typedef struct QueueSS {
-  int volatile reader;
-  int volatile writer;
-  int max;
+typedef struct Queue {
+  size_t reader;
+  size_t writer;
+  size_t max;
+  mtx_t mutex;
+  cnd_t notEmpty;
+  cnd_t notFull;
   void *items[];
-} QueueSS;
+} Queue;
 
-QueueSS *queue_ss_create(int max) {
-  QueueSS *queue = NULL;
+Queue *queue_create(size_t max) {
+  Queue *queue = NULL;
 
   if (max <= 0) return NULL;
 
-  queue = malloc(sizeof(QueueSS) + (sizeof(void *) * max));
+  queue = malloc(sizeof(Queue) + (sizeof(void *) * max));
 
   if (queue == NULL) {
+    return NULL;
+  }
+
+  if (mtx_init(&queue->mutex, mtx_plain)) {
+    free(queue);
+    perror("mtx_init()\n");
+    return NULL;
+  }
+
+  if (cnd_init(&queue->notEmpty)) {
+    free(queue);
+    perror("cnd_init()\n");
+    return NULL;
+  }
+
+  if (cnd_init(&queue->notFull)) {
+    free(queue);
+    perror("cnd_init()\n");
     return NULL;
   }
 
@@ -48,23 +70,32 @@ QueueSS *queue_ss_create(int max) {
   return queue;
 }
 
-void queue_ss_destroy(QueueSS *queue) { free(queue); }
+void queue_destroy(Queue *queue) { free(queue); }
 
-bool queue_ss_add(QueueSS *queue, void *item) {
-  const int newWriter = (queue->writer + 1) % queue->max;
-  if (newWriter != queue->reader) {
+void queue_add(Queue *queue, void *item) {
+  mtx_lock(&queue->mutex);
+  while (true) {
+    size_t newWriter = (queue->writer + 1) % queue->max;
+    if (newWriter == queue->reader) {
+      cnd_wait(&queue->notFull, &queue->mutex);
+      continue;
+    }
     queue->items[queue->writer] = item;
     queue->writer = newWriter;
-    return true;
+    cnd_signal(&queue->notEmpty);
+    break;
   }
-  return false;
+  mtx_unlock(&queue->mutex);
 }
 
-void *queue_ss_get(QueueSS *queue) {
-  if (queue->reader != queue->writer) {
-    void *item = queue->items[queue->reader];
-    queue->reader = (queue->reader + 1) % queue->max;
-    return item;
+void *queue_get(Queue *queue) {
+  mtx_lock(&queue->mutex);
+  while (queue->reader == queue->writer) {
+    cnd_wait(&queue->notEmpty, &queue->mutex);
   }
-  return NULL;
+  void *item = queue->items[queue->reader];
+  queue->reader = (queue->reader + 1) % queue->max;
+  cnd_signal(&queue->notFull);
+  mtx_unlock(&queue->mutex);
+  return item;
 }
