@@ -46,7 +46,14 @@
     "thpool.h": "c",
     "queue.h": "c",
     "stdbool.h": "c",
-    "limits": "c"
+    "limits": "c",
+    "queue_ss.h": "c",
+    "signal.h": "c",
+    "errno.h": "c",
+    "unistd.h": "c",
+    "pthread.h": "c",
+    "typeinfo": "c",
+    "stdatomic.h": "c"
   },
   "files.exclude": {
     "**/bazel-*": true,

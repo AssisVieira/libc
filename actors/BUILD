@@ -14,7 +14,7 @@
 #   limitations under the License.
 ################################################################################
 
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
 cc_library(
     name = "actors",
@@ -23,10 +23,12 @@ cc_library(
         "actors.h",
     ],
     hdrs = ["actors.h"],
+    defines = ["_GNU_SOURCE"],
     visibility = ["//visibility:public"],
     deps = [
+        "//log",
         "//queue",
-        "//threads",
+        "//queue:queue_ss",
         "//vetor",
     ],
 )
@@ -34,5 +36,19 @@ cc_library(
 cc_test(
     name = "test",
     srcs = ["test.c"],
-    deps = [":actors", "//db"],
+    data = ["log"],
+    deps = [
+        ":actors",
+        "//db",
+    ],
+)
+
+cc_binary(
+    name = "model",
+    srcs = ["model.c"],
+    defines = ["_GNU_SOURCE"],
+    deps = [
+        "//queue",
+        "//vetor",
+    ],
 )

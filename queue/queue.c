@@ -14,7 +14,7 @@
  *   limitations under the License.
  ******************************************************************************/
 
-#include "queue.h"
+#include "queue_ss.h"
 
 #include <assert.h>
 #include <limits.h>
@@ -23,105 +23,48 @@
 #include <string.h>
 #include <threads.h>
 
-typedef struct Node {
-  void *value;
-  struct Node *next;
-} Node;
-
-typedef struct Queue {
-  volatile int count;
+typedef struct QueueSS {
+  int volatile reader;
+  int volatile writer;
   int max;
-  mtx_t mtxTail;
-  mtx_t mtxHead;
-  Node *head;
-  Node *tail;
-} Queue;
+  void *items[];
+} QueueSS;
 
-Queue *queue_create(int max) {
+QueueSS *queue_ss_create(int max) {
+  QueueSS *queue = NULL;
+
   if (max <= 0) return NULL;
 
-  Queue *queue = malloc(sizeof(Queue));
+  queue = malloc(sizeof(QueueSS) + (sizeof(void *) * max));
 
-  if (queue == NULL) return NULL;
-
-  queue->count = 0;
-  queue->max = max;
-
-  if (mtx_init(&queue->mtxHead, mtx_plain)) {
-    free(queue);
+  if (queue == NULL) {
     return NULL;
   }
 
-  if (mtx_init(&queue->mtxTail, mtx_plain)) {
-    free(queue);
-    return NULL;
-  }
-
-  Node *emptyNode = malloc(sizeof(Node));
-
-  if (emptyNode == NULL) {
-    free(queue);
-    return NULL;
-  }
-
-  emptyNode->value = NULL;
-  emptyNode->next = NULL;
-
-  queue->head = emptyNode;
-  queue->tail = emptyNode;
+  queue->reader = 0;
+  queue->writer = 0;
+  queue->max = max + 1;
 
   return queue;
 }
 
-int queue_count(Queue *queue) { return queue->count; }
+void queue_ss_destroy(QueueSS *queue) { free(queue); }
 
-void queue_destroy(Queue *queue) {
-  while (queue->head != NULL) {
-    Node *node = queue->head;
-    queue->head = node->next;
-    free(node);
+bool queue_ss_add(QueueSS *queue, void *item) {
+  const int newWriter = (queue->writer + 1) % queue->max;
+  if (newWriter != queue->reader) {
+    queue->items[queue->writer] = item;
+    queue->writer = newWriter;
+    return true;
   }
-  free(queue);
+  return false;
 }
 
-bool queue_add(Queue *queue, void *item) {
-  do {
-    int oldCount = queue->count;
-
-    if (oldCount >= queue->max) return false;
-
-    if (__sync_bool_compare_and_swap(&queue->count, oldCount, oldCount + 1)) {
-      break;
-    }
-  } while (true);
-
-  Node *node = malloc(sizeof(Node));
-
-  if (node == NULL) return false;
-
-  node->value = item;
-  node->next = NULL;
-
-  mtx_lock(&queue->mtxTail);
-  queue->tail->next = node;
-  queue->tail = node;
-  mtx_unlock(&queue->mtxTail);
-
-  return true;
-}
-
-void *queue_get(Queue *queue) {
-  mtx_lock(&queue->mtxHead);
-  Node *node = queue->head;
-  Node *newHead = node->next;
-  if (newHead == NULL) {
-    mtx_unlock(&queue->mtxHead);
-    return NULL;
+void *queue_ss_get(QueueSS *queue) {
+  if (queue->reader != queue->writer) {
+    void *item = queue->items[queue->reader];
+    queue->reader = (queue->reader + 1) % queue->max;
+    return item;
   }
-  Node *value = newHead->value;
-  queue->head = newHead;
-  mtx_unlock(&queue->mtxHead);
-  __sync_fetch_and_sub(&queue->count, 1);
-  free(node);
-  return value;
+  return NULL;
 }

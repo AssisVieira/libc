@@ -1,80 +1,147 @@
-#include "actors.h"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+#include <signal.h>
+#include <unistd.h>
+
+#include "actors.h"
 #include "db/db.h"
+#include "log/log.h"
+
+////////////////////////////////////////////////////////////////////////////////
+/// ACTOR PING INTERFACE////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+typedef struct ActorPing {
+  int actorPong;
+  int maxPings;
+  int count;
+} ActorPing;
 
 enum {
-  ACTOR_A_MSG_ADD,
-  ACTOR_B_MSG_LIST,
+  ACTOR_PING,
 };
 
-typedef struct User {
-  char name[128];
-  char email[128];
-} User;
+static ActorMsg *actorPing_receive(const ActorMsg *msg);
+static int actorPing_create(Actor *parent, const char *name, int maxPing);
 
 ////////////////////////////////////////////////////////////////////////////////
+/// ACTOR PONG INTERFACE////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-static void actorA_handle(int type, const void* msg, int size) {
-  if (type == ACTOR_A_MSG_ADD) {
-    const User* user = msg;
-    DB* db = db_open();
-    db_sql(db, "insert into people (name, email) values ($1::text, $2::text)");
-    db_param(db, user->name);
-    db_param(db, user->email);
-    if (db_exec(db)) {
-      printf("[actor-a] Fail\n");
+enum {
+  ACTOR_PONG,
+};
+
+static ActorMsg *actorPong_receive(const ActorMsg *msg);
+static void actorPong_pong(Actor *from, int to);
+static int actorPong_create(Actor *parent, const char *name);
+
+////////////////////////////////////////////////////////////////////////////////
+/// ACTOR PING IMPLEMENTATION //////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+static ActorMsg *actorPing_receive(const ActorMsg *msg) {
+  Actor *me = actor_msg_to(msg);
+  ActorPing *ctx = actor_context(me);
+
+  switch (actor_msg_type(msg)) {
+    case ACTOR_CREATE: {
+      printf("[%s] Hello!\n", actor_name(me));
+
+      ActorPing newContext;
+      newContext.maxPings = *(int *)actor_msg_params(msg);
+      newContext.count = 0;
+      newContext.actorPong = actorPong_create(me, "actor-pong");
+
+      return actor_resp(ACTOR_CREATED, &newContext, sizeof(newContext));
     }
-    db_close(db);
-    return;
-  }
-}
 
-static int actorA_create(Actors* actors, const char* name) {
-  return actors_actorCreate(actors, name, 100, actorA_handle);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-static void actorB_handle(int type, const void* msg, int size) {
-  if (type == ACTOR_B_MSG_LIST) {
-    DB* db = db_open();
-    db_sql(db, "select id, name, email from people order by id desc limit 1");
-    if (db_exec(db) && db_count(db) == 1) {
-      printf("[actor-b] Fail\n");
+    case ACTOR_PING: {
+      if (ctx->count < ctx->maxPings) {
+        printf("[%s] PING %d\n", actor_name(me), ctx->count++);
+        actorPong_pong(me, ctx->actorPong);
+      } else {
+        kill(getpid(), SIGTERM);
+      }
+      return NULL;
     }
-    printf("{id: %s, name: %s, email: %s}\n", db_value(db, 0, 0),
-           db_value(db, 0, 1), db_value(db, 0, 2));
-    db_close(db);
-    return;
-  }
-}
 
-static int actorB_create(Actors* actors, const char* name) {
-  return actors_actorCreate(actors, name, 100, actorB_handle);
+    case ACTOR_DESTROY: {
+      printf("[%s] Bye!\n", actor_name(me));
+      return NULL;
+    }
+  }
+
+  return NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int main() {
-  Actors* actors = actors_create(4);
-
-  db_openPool(50, 50, false);
-
-  int actorA1 = actorA_create(actors, "actorA1", pool);
-
-  int actorB1 = actorB_create(actors, "actorB1", pool);
-
-  for (int i = 0; i < 1000000; i++) {
-    User user = {"Assis Vieira", "assis.sv@gmail.com"};
-    snprintf(user.name, sizeof(user.name), "Assis Vieira %d", i);
-    actors_send(actors, actorA1, ACTOR_A_MSG_ADD, &user, sizeof(User));
-    actors_send(actors, actorB1, ACTOR_B_MSG_LIST, NULL, 0);
-  }
-
-  db_closePool();
-
-  return 0;
+static int actorPing_create(Actor *parent, const char *name, int maxPing) {
+  return actor_create(parent, name, actorPing_receive, &maxPing,
+                      sizeof(maxPing));
 }
 
-// esquizofrenoias - fausto fanti
+////////////////////////////////////////////////////////////////////////////////
+
+static void actorPing_ping(Actor *from, int to) {
+  actor_send(from, to, ACTOR_PING, NULL, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// ACTOR PONG IMPLEMENTATION //////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+static ActorMsg *actorPong_receive(const ActorMsg *msg) {
+  Actor *me = actor_msg_to(msg);
+
+  switch (actor_msg_type(msg)) {
+    case ACTOR_CREATE: {
+      printf("[%s] Hello!\n", actor_name(me));
+      return NULL;
+    }
+
+    case ACTOR_PONG: {
+      printf("[%s] PONG\n", actor_name(me));
+      return actor_resp(ACTOR_PING, NULL, 0);
+    }
+
+    case ACTOR_DESTROY: {
+      printf("[%s] Bye!\n", actor_name(me));
+      return NULL;
+    }
+  }
+
+  return NULL;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int actorPong_create(Actor *parent, const char *name) {
+  return actor_create(parent, name, actorPong_receive, NULL, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static void actorPong_pong(Actor *from, int to) {
+  actor_send(from, to, ACTOR_PONG, NULL, 0);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+int main(int argc, const char *argv[]) {
+  Actor *root = NULL;
+  int count = 0;
+  int actorPing = -1;
+  
+  root = actor_init();
+
+  count = atoi(argv[1]);
+
+  actorPing = actorPing_create(root, "actor-ping", count);
+
+  actorPing_ping(root, actorPing);
+
+  return actor_wait(root);
+}

@@ -30,7 +30,6 @@ cc_library(
         "//buff",
         "//log",
         "//str",
-        "//threads"
     ],
 )
 

@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <threads.h>
 
 #include "db.h"
@@ -14,13 +15,13 @@ static void testOpen() {
   db_close(db);
 }
 
-static int testPoolCreateConcurrencyWorker(void *arg) {
+static int testConcurrencyWorker(void *arg) {
   DBPool *pool = arg;
 
   for (int i = 0; i < 100000; i++) {
     DB *db = db_pool_get(pool);
     assert(db != NULL);
-    db_sql(db, "select id from people");
+    db_sql(db, "select id from people limit 1");
     assert(db_exec(db) == 0);
     db_close(db);
   }
@@ -28,7 +29,7 @@ static int testPoolCreateConcurrencyWorker(void *arg) {
   return 0;
 }
 
-static void testPoolCreateConcurrency() {
+static void testConcurrency() {
   thrd_t thread1;
   thrd_t thread2;
   thrd_t thread3;
@@ -38,16 +39,16 @@ static void testPoolCreateConcurrency() {
   assert(db_pool_num_busy(pool) == 0);
   assert(db_pool_num_idle(pool) == 1);
 
-  thrd_create(&thread1, testPoolCreateConcurrencyWorker, pool);
-  thrd_create(&thread2, testPoolCreateConcurrencyWorker, pool);
-  thrd_create(&thread3, testPoolCreateConcurrencyWorker, pool);
+  thrd_create(&thread1, testConcurrencyWorker, pool);
+  thrd_create(&thread2, testConcurrencyWorker, pool);
+  thrd_create(&thread3, testConcurrencyWorker, pool);
 
   thrd_join(thread1, NULL);
   thrd_join(thread2, NULL);
   thrd_join(thread3, NULL);
 
   assert(db_pool_num_busy(pool) == 0);
-  assert(db_pool_num_idle(pool) == 1);
+  assert(db_pool_num_idle(pool) == 3);
 
   db_pool_destroy(pool);
 }
@@ -57,7 +58,7 @@ int main() {
 
   testOpen();
 
-  testPoolCreateConcurrency();
+  testConcurrency();
 
   return 0;
 }

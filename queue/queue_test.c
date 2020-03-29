@@ -16,11 +16,18 @@
 
 #include "queue.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <threads.h>
+
+#define assert(X)                             \
+  if (!(X)) {                                 \
+    fprintf(stderr, "assert fail: %s\n", #X); \
+    exit(-1);                                 \
+  }
+
+// #define DEBUG
 
 static void testCreate() {
   {
@@ -51,8 +58,8 @@ static void testAdd() {
   assert(queue_add(queue, "c") == true);
   assert(queue_count(queue) == 3);
 
-  assert(queue_add(queue, "d") == false);
-  assert(queue_count(queue) == 3);
+  // assert(queue_add(queue, "d") == false);
+  // assert(queue_count(queue) == 3);
 
   queue_destroy(queue);
 }
@@ -60,7 +67,7 @@ static void testAdd() {
 static void testGet() {
   Queue *queue = queue_create(3);
 
-  assert(queue_get(queue) == NULL);
+  // assert(queue_get(queue) == NULL);
   assert(queue_count(queue) == 0);
 
   assert(queue_add(queue, "a") == true);
@@ -73,8 +80,8 @@ static void testGet() {
   assert(strcmp(queue_get(queue), "b") == 0);
   assert(queue_count(queue) == 0);
 
-  assert(queue_get(queue) == NULL);
-  assert(queue_count(queue) == 0);
+  // assert(queue_get(queue) == NULL);
+  // assert(queue_count(queue) == 0);
 
   queue_destroy(queue);
 }
@@ -84,15 +91,25 @@ static int testFastConsumer(void *arg) {
   char *item = NULL;
 
   while (true) {
-    while ((item = queue_get(queue)) == NULL) thrd_yield();
+    item = queue_get(queue);
 
     if (strcmp(item, "abc")) break;
 
     free(item);
+
+#ifdef DEBUG
+    fprintf(stdout, "[consumer] (count=%d)\n", queue_count(queue));
+    fflush(stdout);
+#endif
   }
 
   assert(strcmp(item, "end") == 0);
   free(item);
+
+#ifdef DEBUG
+  fprintf(stdout, "[consumer] (count=%d) END!\n", queue_count(queue));
+  fflush(stdout);
+#endif
 
   return 0;
 }
@@ -102,10 +119,10 @@ static int testSlowConsumer(void *arg) {
   char *item = NULL;
 
   while (true) {
-    // sleep 1ms
-    thrd_sleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 1000000}, NULL);
+    // sleep 0.1ms
+    thrd_sleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 100000}, NULL);
 
-    while ((item = queue_get(queue)) == NULL) thrd_yield();
+    item = queue_get(queue);
 
     if (strcmp(item, "abc")) break;
 
@@ -122,15 +139,21 @@ static int testSlowProducer(void *arg) {
   Queue *queue = arg;
 
   for (int i = 0; i < 10000; i++) {
-    // sleep 0.5ms
-    thrd_sleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 500000}, NULL);
+    // sleep 0.1ms
+    thrd_sleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 100000}, NULL);
 
-    char *item = strdup("abc");
-    while (!queue_add(queue, item)) thrd_yield();
+    queue_add(queue, strdup("abc"));
 
-    fprintf(stdout, "(%d) i = %d\n", queue_count(queue), i);
+#ifdef DEBUG
+    fprintf(stdout, "[producer] (count=%d) i = %d\n", queue_count(queue), i);
     fflush(stdout);
+#endif
   }
+
+#ifdef DEBUG
+  fprintf(stdout, "[producer] (count=%d) END!\n", queue_count(queue));
+  fflush(stdout);
+#endif
 
   return 0;
 }
@@ -139,17 +162,23 @@ static int testFastProducer(void *arg) {
   Queue *queue = arg;
 
   for (int i = 0; i < 10000; i++) {
-    char *item = strdup("abc");
-    while (!queue_add(queue, item)) thrd_yield();
-
-    fprintf(stdout, "(%d) i = %d\n", queue_count(queue), i);
+    queue_add(queue, strdup("abc"));
+#ifdef DEBUG
+    fprintf(stdout, "[producer] (count=%d) i = %d\n", queue_count(queue), i);
     fflush(stdout);
+#endif
   }
+
+#ifdef DEBUG
+  fprintf(stdout, "[producer] (count=%d) END!\n", queue_count(queue));
+  fflush(stdout);
+#endif
 
   return 0;
 }
 
-static void testSingleProducerSingleConsumer(int (*fnProducer)(void*), int (*fnConsumer)(void*)) {
+static void testSingleProducerSingleConsumer(int (*fnProducer)(void *),
+                                             int (*fnConsumer)(void *)) {
   thrd_t tProducer;
   thrd_t tConsumer;
   Queue *queue = queue_create(100);
@@ -160,7 +189,7 @@ static void testSingleProducerSingleConsumer(int (*fnProducer)(void*), int (*fnC
   thrd_join(tProducer, NULL);
 
   char *item = strdup("end");
-  while (!queue_add(queue, item)) thrd_yield();
+  queue_add(queue, item);
 
   thrd_join(tConsumer, NULL);
 
@@ -169,7 +198,8 @@ static void testSingleProducerSingleConsumer(int (*fnProducer)(void*), int (*fnC
   queue_destroy(queue);
 }
 
-static void testManyProducerSingleConsumer(int (*fnProducer)(void*), int (*fnConsumer)(void*)) {
+static void testManyProducerSingleConsumer(int (*fnProducer)(void *),
+                                           int (*fnConsumer)(void *)) {
   thrd_t tProducer1;
   thrd_t tProducer2;
   thrd_t tConsumer;
@@ -183,7 +213,7 @@ static void testManyProducerSingleConsumer(int (*fnProducer)(void*), int (*fnCon
   thrd_join(tProducer2, NULL);
 
   char *item = strdup("end");
-  while (!queue_add(queue, item)) thrd_yield();
+  queue_add(queue, item);
 
   thrd_join(tConsumer, NULL);
 
@@ -192,7 +222,8 @@ static void testManyProducerSingleConsumer(int (*fnProducer)(void*), int (*fnCon
   queue_destroy(queue);
 }
 
-static void testSingleProducerManyConsumer(int (*fnProducer)(void*), int (*fnConsumer)(void*)) {
+static void testSingleProducerManyConsumer(int (*fnProducer)(void *),
+                                           int (*fnConsumer)(void *)) {
   thrd_t tProducer1;
   thrd_t tConsumer1;
   thrd_t tConsumer2;
@@ -205,10 +236,10 @@ static void testSingleProducerManyConsumer(int (*fnProducer)(void*), int (*fnCon
   thrd_join(tProducer1, NULL);
 
   char *item1 = strdup("end");
-  while (!queue_add(queue, item1)) thrd_yield();
+  queue_add(queue, item1);
 
   char *item2 = strdup("end");
-  while (!queue_add(queue, item2)) thrd_yield();
+  queue_add(queue, item2);
 
   thrd_join(tConsumer1, NULL);
   thrd_join(tConsumer2, NULL);
@@ -218,7 +249,8 @@ static void testSingleProducerManyConsumer(int (*fnProducer)(void*), int (*fnCon
   queue_destroy(queue);
 }
 
-static void testManyProducerManyConsumer(int (*fnProducer)(void*), int (*fnConsumer)(void*)) {
+static void testManyProducerManyConsumer(int (*fnProducer)(void *),
+                                         int (*fnConsumer)(void *)) {
   thrd_t tProducer1;
   thrd_t tProducer2;
   thrd_t tConsumer1;
@@ -234,10 +266,10 @@ static void testManyProducerManyConsumer(int (*fnProducer)(void*), int (*fnConsu
   thrd_join(tProducer2, NULL);
 
   char *item1 = strdup("end");
-  while (!queue_add(queue, item1)) thrd_yield();
+  queue_add(queue, item1);
 
   char *item2 = strdup("end");
-  while (!queue_add(queue, item2)) thrd_yield();
+  queue_add(queue, item2);
 
   thrd_join(tConsumer1, NULL);
   thrd_join(tConsumer2, NULL);

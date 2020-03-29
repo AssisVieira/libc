@@ -1,195 +1,309 @@
 #include "actors.h"
 
+#include <errno.h>
+#include <math.h>
+#include <pthread.h>
+#include <sched.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+#include <threads.h>
+#include <unistd.h>
 
 #include "queue/queue.h"
 #include "vetor/vetor.h"
-#include "threads/thpool.h"
-#include <threads.h>
-#include <stdbool.h>
-
-typedef struct thpool_ ThreadPool;
 
 ////////////////////////////////////////////////////////////////////////////////
+/// ACTOR MSG DEFINITIONS //////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
-typedef struct Message {
+typedef struct ActorMsg {
+  Actor *from;
+  Actor *to;
   int type;
   int size;
-  char *content[];
-} Message;
+  char *params[];
+} ActorMsg;
 
-/**
- * Create a message, copying the content.
- */
-static Message *message_create(int type, const void *content, int size);
-
-/**
- * Free memory used by the message.
- */
-static void message_destroy(Message *message);
-
+////////////////////////////////////////////////////////////////////////////////
+/// ACTOR DEFINITIONS //////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
 typedef struct Actor {
+  int id;
   char *name;
-  Queue *messages;
-  ActorHandler handler;
-  bool volatile scheduled;
+  Queue *msgs;
+  thrd_t thread;
+  ActorReceive receive;
+  void *context;
+  struct Actor *parent;
+  Vetor *children;
 } Actor;
 
 /**
- * Create a instance of actor.
+ * Executes the actor until he is destroyed.
  *
- * @param name      actor's name, it's util for identify the actor's instance at
- *                  the system.
- * @param max       maximum number the messages in the actor's queue.
- * @param handler   function with the logic of the actor.
+ * @param arg  actor.
  */
-static Actor *actor_create(const char *name, int max, ActorHandler handler);
-
-/**
- * Send a message to the actor's queue, copying the content.
- */
-static void actor_send(Actor *actor, int type, const void *content, int size);
-
-static void actor_destroy(Actor *actor);
+static int actor_worker(void *arg);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-typedef struct Actors {
-  ThreadPool *threads;
-  Vetor *actors;
-  Queue *jobs;
-} Actors;
-
+/// ACTOR IMPLEMENTATION ///////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-static Message *message_create(int type, const void *content, int size) {
-  Message *message = malloc(sizeof(Message) + size);
-  message->type = type;
-  message->size = size;
-  memcpy(message->content, content, size);
-  return message;
+static void actor_close(Actor *actor) {
+  for (int i = 0; i < vetor_qtd(actor->children); i++) {
+    if (vetor_item(actor->children, i) != NULL) {
+      actor_destroy(actor, i);
+    }
+  }
+
+  printf("[%s] Bye!\n", actor->name);
+
+  vetor_destruir(actor->children);
+  free(actor->name);
+  free(actor->context);
+  free(actor);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void message_destroy(Message *message) { free(message); }
+Actor *actor_init() {
+  Actor *actor = NULL;
+  sigset_t mask;
 
-////////////////////////////////////////////////////////////////////////////////
+  sigfillset(&mask);
 
-static Actor *actor_create(const char *name, int max, ActorHandler handler) {
-  Actor *actor = malloc(sizeof(Actor));
-  actor->name = strdup(name);
-  actor->handler = handler;
-  actor->messages = queue_create(max);
+  if (pthread_sigmask(SIG_SETMASK, &mask, NULL)) {
+    fprintf(stderr, "pthread_sigmask()\n");
+    return NULL;
+  }
+
+  actor = malloc(sizeof(Actor));
+  actor->id = -1;
+  actor->name = strdup("actor-main");
+  actor->receive = NULL;
+  actor->msgs = NULL;
+  actor->context = NULL;
+  actor->children = vetor_criar(32);
+  actor->parent = NULL;
+  actor->thread = thrd_current();
+
   return actor;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void actor_send(Actor *actor, int type, const void *content, int size) {
-  Message *message = message_create(type, content, size);
-  while (!queue_add(actor->messages, message)) thrd_yield();
+int actor_wait(Actor *actor) {
+  sigset_t mask;
+  int sig;
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGTERM);
+  sigaddset(&mask, SIGINT);
+
+  if (sigwait(&mask, &sig)) {
+    fprintf(stderr, "sigwait()\n");
+    return -1;
+  }
+
+  actor_close(actor);
+
+  // Awaits the last thread, the thread that throwed the SIGTERM.
+  // This just prevents valgrind from alerting us about memory leaks.
+  sleep(1);
+
+  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void actor_worker(void *arg) {
-  Actor *actor = arg;
+int actor_create(Actor *parent, const char *name, ActorReceive receive,
+                 const void *params, int size) {
+  Actor *actor = NULL;
+
+  actor = malloc(sizeof(Actor));
+  actor->id = 0;
+  actor->name = strdup(name);
+  actor->receive = receive;
+  actor->msgs = queue_create(ACTOR_QUEUE_SIZE);
+  actor->context = NULL;
+  actor->children = vetor_criar(32);
+  actor->parent = parent;
+
+  if (thrd_create(&actor->thread, actor_worker, actor)) {
+    return -1;
+  }
+
+  actor->id = vetor_add(parent->children, actor);
+
+  actor_send(parent, actor->id, ACTOR_CREATE, params, size);
+
+  return actor->id;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void actor_send(Actor *from, int to, int type, const void *params,
+                size_t size) {
+  Actor *actorTo = vetor_item(from->children, to);
+  ActorMsg *msg = actor_msg_create(from, actorTo, type, params, size);
+  while (!queue_add(actorTo->msgs, msg)) thrd_yield();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static int actor_worker(void *arg) {
+  Actor *me = arg;
+  Actor *parent = me->parent;
+  ActorMsg *msg = NULL;
+
+  sigset_t mask;
+  sigfillset(&mask);
+  if (sigprocmask(SIG_SETMASK, &mask, NULL)) {
+    fprintf(stderr, "sigprocmask()\n");
+    return -1;
+  }
 
   while (true) {
-    Message *msg = queue_get(actor->messages);
+    while ((msg = queue_get(me->msgs)) == NULL) {
+      thrd_yield();
+      int sig;
+      printf("[%s] wait\n", me->name);
+      sigwait(&mask, &sig);
+      printf("[%s] wake up\n", me->name);
+    }
 
-    if (msg == NULL) {
+    if (msg->type == ACTOR_DESTROY) {
+      for (int i = 0; i < vetor_qtd(me->children); i++) {
+        Actor *child = vetor_item(me->children, i);
+        if (child == NULL) continue;
+        actor_destroy(me, i);
+      }
+    }
+
+    if (msg->type == ACTOR_KILLME) {
+      actor_destroy(me, msg->from->id);
+    }
+
+    ActorMsg *resp = me->receive(msg);
+
+    if (resp != NULL) {
+      if (msg->type == ACTOR_CREATE) {
+        me->context = malloc(resp->size);
+        memcpy(me->context, resp->params, resp->size);
+      }
+
+      if (msg->from->msgs != NULL) {
+        resp->from = me;
+        resp->to = msg->from;
+        queue_add(msg->from->msgs, resp);
+      } else {
+        actor_msg_destroy(resp);
+      }
+    }
+
+    if (msg->type == ACTOR_DESTROY) {
       break;
     }
 
-    actor->handler(msg->type, msg->content, msg->size);
-
-    message_destroy(msg);
+    actor_msg_destroy(msg);
   }
 
-  actor->scheduled = false;
+  do {
+    // Destroys the last message: ACTOR_DESTROY ...
+    actor_msg_destroy(msg);
+  } while ((msg = queue_get(me->msgs)) != NULL);
+
+  if (parent != NULL) {
+    vetor_inserir(parent->children, me->id, NULL);
+  }
+
+  queue_destroy(me->msgs);
+  vetor_destruir(me->children);
+  free(me->name);
+  free(me->context);
+  free(me);
+
+  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static void actor_destroy(Actor *actor) {
-  free(actor->name);
-  queue_destroy(actor->messages);
-  free(actor);
+ActorMsg *actor_resp(int type, const void *params, size_t size) {
+  return actor_msg_create(NULL, NULL, type, params, size);
 }
+
 ////////////////////////////////////////////////////////////////////////////////
 
-static void actors_worker(void *arg) {
-  Actors *actors = arg;
-  while (1) {
-    Actor *actor = queue_get(actors->jobs);
-    if (actor == NULL) {
-      thrd_yield();
-      continue;
+void *actor_context(Actor *actor) { return actor->context; }
+
+////////////////////////////////////////////////////////////////////////////////
+
+const char *actor_name(Actor *actor) { return actor->name; }
+
+////////////////////////////////////////////////////////////////////////////////
+
+void actor_exit(Actor *actor) {
+  actor_send(actor->parent, actor->id, ACTOR_DESTROY, NULL, 0);
+
+  // Checks whether the actor is the only primary actor.
+  // If it is, then finish the process.
+  if (actor->parent->id == -1) {
+    int primaryActors = 0;
+    for (int i = 0; i < vetor_qtd(actor->parent->children); i++) {
+      Actor *child = vetor_item(actor->parent->children, i);
+      if (child == NULL) continue;
+      primaryActors++;
     }
-    thpool_add_work(actors->threads, actor_worker, actor);
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-Actors *actors_create(int threads) {
-  Actors *actors = malloc(sizeof(Actors));
-  actors->threads = thpool_init(threads);
-  actors->actors = vetor_criar(100);
-  actors->jobs = queue_create(100);
-
-  thpool_add_work(actors->threads, actors_worker, actors);
-
-  return actors;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void actors_wait(Actors *actors) { thpool_wait(actors->threads); }
-
-////////////////////////////////////////////////////////////////////////////////
-
-void actors_send(Actors *actors, int to, int type, const void *msg,
-                 size_t size) {
-  Actor *toActor = vetor_item(actors->actors, to);
-  actor_send(toActor, type, msg, size);
-  if (__sync_bool_compare_and_swap(&toActor->scheduled, false, true)) {  // CAS
-    queue_add(actors->jobs, toActor);
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-int actors_actorCreate(Actors *actors, const char *name, int max,
-                       ActorHandler handler) {
-  Actor *actor = actor_create(name, max, handler);
-  return vetor_add(actors->actors, actor);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-int actors_actorId(Actors *actors, const char *name) {
-  for (int i = 0; i < vetor_qtd(actors->actors); i++) {
-    Actor *actor = vetor_item(actors->actors, i);
-    if (strcmp(actor->name, name) == 0) {
-      return i;
+    if (primaryActors == 0) {
+      pthread_kill(actor->parent->thread, SIGTERM);
     }
   }
-  return -1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void actors_destroy(Actors *actors) {
-  thpool_destroy(actors->threads);
-  for (int i = 0; i < vetor_qtd(actors->actors); i++) {
-    Actor *actor = vetor_item(actors->actors, i);
-    actor_destroy(actor);
-  }
-  vetor_destruir(actors->actors);
-  free(actors);
+void actor_destroy(Actor *parent, int actorId) {
+  Actor *actor = vetor_item(parent->children, actorId);
+
+  actor_send(parent, actorId, ACTOR_DESTROY, NULL, 0);
+
+  thrd_join(actor->thread, NULL);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// ACTOR MSG IMPLEMENTATION ///////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+ActorMsg *actor_msg_create(Actor *from, Actor *to, int type, const void *params,
+                           int size) {
+  ActorMsg *msg = malloc(sizeof(ActorMsg) + size);
+  msg->from = from;
+  msg->to = to;
+  msg->type = type;
+  msg->size = size;
+  memcpy(msg->params, params, size);
+  return msg;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+Actor *actor_msg_from(const ActorMsg *msg) { return msg->from; }
+
+////////////////////////////////////////////////////////////////////////////////
+
+Actor *actor_msg_to(const ActorMsg *msg) { return msg->to; }
+
+////////////////////////////////////////////////////////////////////////////////
+
+int actor_msg_type(const ActorMsg *msg) { return msg->type; }
+
+////////////////////////////////////////////////////////////////////////////////
+
+const void *actor_msg_params(const ActorMsg *msg) { return msg->params; }
+
+////////////////////////////////////////////////////////////////////////////////
+
+void actor_msg_destroy(ActorMsg *message) { free(message); }

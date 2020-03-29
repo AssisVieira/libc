@@ -61,11 +61,10 @@ struct DB {
 ////////////////////////////////////////////////////////////////////////////////
 
 typedef struct DBPool {
-  Queue *dbs;
+  Queue *dbs;  // idle dbs
   int min;
   int max;
   volatile int busy;
-  volatile int idle;
   char *strConn;
   bool async;
 } DBPool;
@@ -80,20 +79,26 @@ DBPool *db_pool_create(const char *strConn, bool async, int min, int max) {
   pool->min = min;
   pool->max = max;
   pool->busy = 0;
-  pool->idle = 0;
   pool->async = async;
   pool->strConn = strdup(strConn);
 
   for (int i = 0; i < min; i++) {
     DB *db = db_open_intern(strConn, async, pool);
-    if (db != NULL) {
-      if (queue_add(pool->dbs, db)) {
-        pool->idle++;
-      }
+
+    if (db == NULL) {
+      db_pool_destroy(pool);
+      return NULL;
+    }
+
+    if (!queue_add(pool->dbs, db)) {
+      db_destroy(db);
+      db_pool_destroy(pool);
+      return NULL;
     }
   }
 
-  log_info("db", "db_pool_create(): %d idle, %d busy.\n", pool->idle, pool->busy);
+  log_info("db", "db_pool_create(): %d idle, %d busy.\n",
+           queue_count(pool->dbs), pool->busy);
 
   return pool;
 }
@@ -104,7 +109,6 @@ DB *db_pool_get(DBPool *pool) {
   DB *db = queue_get(pool->dbs);
 
   if (db != NULL) {
-    __sync_fetch_and_sub(&pool->idle, 1);
     __sync_fetch_and_add(&pool->busy, 1);
   } else {
     do {
@@ -308,20 +312,9 @@ void db_close(DB *db) {
 
   if (db->pool != NULL) {
     __sync_fetch_and_sub(&db->pool->busy, 1);
-    do {
-      int oldIdle = db->pool->idle;
-
-      if (oldIdle < db->pool->min) {
-        if (__sync_bool_compare_and_swap(&db->pool->idle, oldIdle,
-                                         oldIdle + 1)) {
-          queue_add(db->pool->dbs, db);
-          break;
-        }
-      } else {
-        db_destroy(db);
-        break;
-      }
-    } while (true);
+    if (!queue_add(db->pool->dbs, db)) {
+      db_destroy(db);
+    }
   }
 }
 
@@ -438,4 +431,4 @@ int db_pool_num_busy(const DBPool *pool) { return pool->busy; }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-int db_pool_num_idle(const DBPool *pool) { return pool->idle; }
+int db_pool_num_idle(const DBPool *pool) { return queue_count(pool->dbs); }
