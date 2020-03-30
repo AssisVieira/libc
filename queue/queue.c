@@ -19,6 +19,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdatomic.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,9 +38,12 @@ typedef struct Queue {
 Queue *queue_create(size_t max) {
   Queue *queue = NULL;
 
-  if (max <= 0) return NULL;
+  if (max == 0 || max == SIZE_MAX) return NULL;
 
-  queue = malloc(sizeof(Queue) + (sizeof(void *) * max));
+  // Adds the dummy node.
+  max = max + 1;
+
+queue = malloc(sizeof(Queue) + (sizeof(void *) * max));
 
   if (queue == NULL) {
     return NULL;
@@ -65,20 +69,26 @@ Queue *queue_create(size_t max) {
 
   queue->reader = 0;
   queue->writer = 0;
-  queue->max = max + 1;
+  queue->max = max;
 
   return queue;
 }
 
 void queue_destroy(Queue *queue) { free(queue); }
 
-void queue_add(Queue *queue, void *item) {
+bool queue_add(Queue *queue, void *item, bool wait) {
+  if (item == NULL) return false;
   mtx_lock(&queue->mutex);
   while (true) {
     size_t newWriter = (queue->writer + 1) % queue->max;
     if (newWriter == queue->reader) {
-      cnd_wait(&queue->notFull, &queue->mutex);
-      continue;
+      if (wait) {
+        cnd_wait(&queue->notFull, &queue->mutex);
+        continue;
+      } else {
+        mtx_unlock(&queue->mutex);
+        return false;
+      }
     }
     queue->items[queue->writer] = item;
     queue->writer = newWriter;
@@ -86,16 +96,46 @@ void queue_add(Queue *queue, void *item) {
     break;
   }
   mtx_unlock(&queue->mutex);
+  return true;
 }
 
-void *queue_get(Queue *queue) {
+void *queue_get(Queue *queue, bool wait) {
   mtx_lock(&queue->mutex);
   while (queue->reader == queue->writer) {
-    cnd_wait(&queue->notEmpty, &queue->mutex);
+    if (wait) {
+      cnd_wait(&queue->notEmpty, &queue->mutex);
+    } else {
+      mtx_unlock(&queue->mutex);
+      return NULL;
+    }
   }
   void *item = queue->items[queue->reader];
   queue->reader = (queue->reader + 1) % queue->max;
   cnd_signal(&queue->notFull);
   mtx_unlock(&queue->mutex);
   return item;
+}
+
+size_t queue_count(Queue *queue) {
+  size_t count = 0;
+
+  if (queue == NULL) return 0;
+
+  mtx_lock(&queue->mutex);
+
+  if (queue->writer >= queue->reader) {
+    // [0][1][2][3][4]
+    //     *  *  *
+    //  r        w      count = 3 - 0 = 3
+    count = queue->writer - queue->reader;
+  } else {
+    // [0][1][2][3][4]
+    //  *        *  *
+    //  w     r         count = 5 - 2 + 0 = 3
+    count = queue->max - queue->reader + queue->writer;
+  }
+
+  mtx_unlock(&queue->mutex);
+
+  return count;
 }

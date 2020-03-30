@@ -23,7 +23,7 @@
 typedef struct Queue Queue;
 
 /**
- * Creates a bounded queue that supports many producers and many consumers.
+ * Creates a bounded queue that supports  many producers and many consumers.
  * This implementation uses only one mutex to synchronize the add and get
  * operations.
  *
@@ -32,21 +32,39 @@ typedef struct Queue Queue;
 Queue *queue_create(size_t max);
 
 /**
- * Adds a item in the end of the queue. This queue support many producers.
- * If the queue is full, the call will be blocked until a item be removed.
+ * Adds a item in the end of the queue. This queue support one or more
+ * producers.
+ *
+ * @param queue queue of items.
+ * @param item item to be added in the queue. The item cannot be NULL.
+ * @param wait true, if the call should be blocked until the item is added. In
+ * this case, the function always returns true. false, if the call should not be
+ * blocked. In this second case, the function can return true or false.
+ * @return true, if the item was added, false, if the queue is full.
  */
-void queue_add(Queue *queue, void *item);
+bool queue_add(Queue *queue, void *item, bool wait);
 
 /**
- * Gets and removes the first item in the queue. This queue support many
- * consumers. If the queue is empty, the call will be blocked until a item be
- * added.
+ * Obtains and removes the first item in the queue. This queue support one or
+ * more consumers.
+ *
+ * @param queue queue of items.
+ * @param wait true, if the call should be blocked until an item is available.
+ * In this case, the function always returns an item. false, if the call should
+ * not be blocked. In this second case, the function return NULL, if the
+ * queue is empty or an item, otherwise.
+ * @return item or NULL, if the queue is empty.
  */
-void *queue_get(Queue *queue);
+void *queue_get(Queue *queue, bool wait);
 
 /**
  * Destroys the queue freeing the used memory, except the added items.
  */
 void queue_destroy(Queue *queue);
+
+/**
+ * Obtain number of items in the queue.
+ */
+size_t queue_count(Queue *queue);
 
 #endif

@@ -14,7 +14,7 @@
 #   limitations under the License.
 ################################################################################
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 cc_library(
     name = "queue_ss",
@@ -31,7 +31,7 @@ cc_test(
     name = "queue_ss_test",
     srcs = ["queue_ss_test.c"],
     visibility = ["//visibility:public"],
-    deps = [":queue_ss"]
+    deps = [":queue_ss", "//asserts"]
 )
 
 cc_library(
@@ -49,6 +49,6 @@ cc_test(
     name = "queue_test",
     srcs = ["queue_test.c"],
     visibility = ["//visibility:public"],
-    deps = [":queue"]
+    deps = [":queue", "//asserts"]
 )
 
