@@ -17,7 +17,7 @@
 #include "db/db.h"
 #include <stdio.h>
 
-static void onInserted(DB *db);
+static void onInserted(DB *db, void *context, bool error);
 
 int main() {
   const char strConn[] = "postgresql://assis:assis@127.0.0.1:5432/assis";
@@ -33,10 +33,10 @@ int main() {
   return io_run(io, 10);
 }
 
-static void onInserted(DB *db) {
-  IO *io = db_context(db);
+static void onInserted(DB *db, void *context, bool error) {
+  IO *io = context;
 
-  if (db_error(db)) {
+  if (error) {
     perror("error on insert.\n");
   } else {
     printf("Row inserted.\n");

@@ -32,7 +32,7 @@ int main() {
   if (db_exec(db)) {
     perror("error: db_exec().\n");
   } else {
-    printf("Total: %d\n", db_count(db));
+    printf("Total: %ld\n", db_count(db));
 
     for (int iRow = 0; iRow < db_count(db); iRow++) {
       printf("id: %s\n", db_value(db, iRow, iColId));
