@@ -25,9 +25,21 @@
 
 typedef struct DB DB;
 
-typedef void (*onDBCallback)(DB *db);
-
 typedef struct DBPool DBPool;
+
+/**
+ * Função que deve tratar o resultado do comando sql enviado com a função
+ * db_send().
+ *
+ * @param db      conexão utilizada pra executar o comando solicitado.
+ * @param context contexto fornecido ao chamar a função db_send().
+ * @param error   true, se houve algum erro com o comando, false, caso
+ *                contrário. Esta flag deve sempre ser verificada antes de
+ *                utilizar a conexão. Pois se houver erro, a conexão será
+ *                descartada quando a callback retornar e qualquer operação com
+ *                a conexão será nula.
+ */
+typedef void (*onDBCallback)(DB *db, void *context, bool error);
 
 /**
  * Cria um o pool de conexões.
@@ -35,12 +47,12 @@ typedef struct DBPool DBPool;
  * @param  strConn  string de conexão.
  * @param  async    true, se as conexões devem ser assíncronas, false, caso
  *                  contrário.
- * @param  max      quantidade máxima de conexões ocupadas.
- * @param  min      quantidade mínima de conexões ociosas.
- * @return          uma instancia de pool de conexões, em caso de sucesso, NULL,
- *                  em caso de erro.
+ * @param  maxIdle  número máximo de conexões ociosas.
+ * @param  maxBusy  número máximo de conexões ocupadas.
+ * @return          pool de conexões, em caso de sucesso, NULL, em caso de erro.
  */
-DBPool *db_pool_create(const char *strConn, bool async, int min, int max);
+DBPool *db_pool_create(const char *strConn, bool async, size_t maxIdle,
+                       size_t maxBusy);
 
 /**
  * Destroi o pool de conexões, fechando todas as conexões ativas e liberando
@@ -49,11 +61,26 @@ DBPool *db_pool_create(const char *strConn, bool async, int min, int max);
 void db_pool_destroy(DBPool *dbpool);
 
 /**
- * Obtém uma conexão do pool.
+ * Tenta obter uma conexão ociosa do pool. Caso não exista conexões ociosas, uma
+ * nova conexão é criada se e somente se o número de conexões ocupadas for menor
+ * que o número máximo especificado na criação do pool. Veja mais em
+ * db_pool_create(). Caso contrário, a função ficará bloqueada até que uma
+ * conexão sejá retornada ao pool, usando db_close().
  *
  * @return conexão com o banco de dados.
  */
 DB *db_pool_get(DBPool *dbpool);
+
+/**
+ * Enables the pool.
+ */
+void db_pool_enable(DBPool *pool);
+
+/**
+ * Disables the pool. In this case, connections from pool will be destroyed
+ * when closed, they must not return to the pool.
+ */
+void db_pool_disable(DBPool *pool);
 
 /**
  * Cria uma conexão com um banco de dados.
@@ -77,12 +104,17 @@ int db_rollback(DB *db);
 int db_commit(DB *db);
 
 /**
- * Efetiva tudo o que ocorreu no block da transação atual e, se a conexão foi
- * obtida de um pool, logo a conexão será mantida aberta, sendo apenas devolvida
- * ao pool. Se a conexão não foi obtida de um pool, logo a conexão será fechada
- * imediatamente, liberando toda a memória usada pela conexão.
- *
- * @param db conexão a ser devolvida.
+ * Encerra o uso da conexão e limpa os dados usados até o momento. Se não houver
+ * nenhum erro na transação, então efetiva tudo o que ocorreu no block da
+ * transação. Se a conexão foi obtida de um pool, logo a conexão será
+ * mantida aberta, sendo apenas devolvida ao pool. A conexão será destruída
+ * apenas se uma das seguintes setenças for verdadeira:
+ *     1. A conexão não pertence a um pool.
+ *     2. A conexão pertence a um pool e...
+ *        a) A conexão está marcada com erro.
+ *        b) O pool estiver desativado.
+ *        c) O número de conexões ociosas chegou ao limite máximo.
+ * @param db conexão a ser encerrada.
  */
 void db_close(DB *db);
 
@@ -113,7 +145,7 @@ void db_param(DB *db, const char *value);
 void db_paramInt(DB *db, int value);
 
 /**
- * Executa o comando sql de forma assíncrona. Esta função deve ser sempre
+ * Executa um comando sql de forma assíncrona. Esta função deve ser sempre
  * chamada após a configuração da sql, com a função db_sql() e após a
  * configurações dos parâmetros da sql, se houver, com a função db_param().
  *
@@ -144,21 +176,12 @@ int db_exec(DB *db);
 const char *db_value(DB *db, int nReg, int nCol);
 
 /**
- * Contexto passado pela função db_send(). Esta função é útil para obter o
- * contexto na callback que trata o resultado do comando sql.
- *
- * @param  db conexão com o banco de dados.
- * @return    contexto
- */
-void *db_context(DB *db);
-
-/**
  * Obtém a quantidade de registros retornado pelo comando sql.
  *
  * @param  db conexão com o banco de dados.
  * @return    quantidade de registros.
  */
-int db_count(DB *db);
+size_t db_count(DB *db);
 
 /**
  * Informa se existe algum erro no comando sql executado.
@@ -178,9 +201,7 @@ bool db_error(DB *db);
 int db_pool_num_busy(const DBPool *pool);
 
 /**
- * Obtém o número de conexões do pool que estão ociosas.
- * Isto é, a quantidade de conexões que estão no pool a espera de serem obtidas
- * com db_pool_get().
+ * Obtém o número de conexões ociosas no pool.
  */
 int db_pool_num_idle(const DBPool *pool);
 
