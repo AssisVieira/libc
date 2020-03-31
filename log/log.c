@@ -212,14 +212,13 @@ void log_terminal(bool terminal) { LOG.terminal = terminal; }
 ////////////////////////////////////////////////////////////////////////////////
 
 static bool log_shouldIgnore(const char *module, LogLevel level) {
-  return true;
-  // for (int i = 0; i < LOG.ignoreLen; i++) {
-  //   if (level >= LOG.ignore[i].level &&
-  //       strcmp(LOG.ignore[i].module, module) == 0) {
-  //     return true;
-  //   }
-  // }
-  // return false;
+  for (int i = 0; i < LOG.ignoreLen; i++) {
+    if (level >= LOG.ignore[i].level &&
+        strcmp(LOG.ignore[i].module, module) == 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
