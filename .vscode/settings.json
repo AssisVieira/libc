@@ -53,7 +53,12 @@
     "unistd.h": "c",
     "pthread.h": "c",
     "typeinfo": "c",
-    "stdatomic.h": "c"
+    "stdatomic.h": "c",
+    "meta_msg.h": "c",
+    "asserts.h": "c",
+    "meta_actor.h": "c",
+    "stddef.h": "c",
+    "actor_spec.h": "c"
   },
   "files.exclude": {
     "**/bazel-*": true,
