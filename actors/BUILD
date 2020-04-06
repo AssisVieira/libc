@@ -14,16 +14,23 @@
 #   limitations under the License.
 ################################################################################
 
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
 
 cc_library(
-    name = "actors",
+    name = "actors_intern",
     srcs = [
-        "actors.c",
-        "actors.h",
+        "actor.h",
+        "meta_actor.h",
+        "meta_msg.c",
+        "meta_msg.h",
+        "msg.c",
+        "msg.h",
+        "worker.c",
+        "worker.h",
     ],
-    hdrs = ["actors.h"],
+    hdrs = ["actors_intern.h"],
     defines = ["_GNU_SOURCE"],
+    linkopts = ["-pthread"],
     visibility = ["//visibility:public"],
     deps = [
         "//log",
@@ -34,21 +41,47 @@ cc_library(
 )
 
 cc_test(
-    name = "test",
-    srcs = ["test.c"],
-    data = ["log"],
+    name = "meta_msg_test",
+    srcs = [
+        "meta_msg_test.c",
+    ],
     deps = [
-        ":actors",
-        "//db",
+        ":actors_intern",
+        "//asserts",
     ],
 )
 
-cc_binary(
-    name = "model",
-    srcs = ["model.c"],
-    defines = ["_GNU_SOURCE"],
+cc_test(
+    name = "msg_test",
+    srcs = [
+        "msg_test.c",
+    ],
+    deps = [
+        ":actors_intern",
+        "//asserts",
+    ],
+)
+
+cc_test(
+    name = "meta_actor_test",
+    srcs = [
+        "meta_actor_test.c",
+    ],
+    deps = [
+        ":actors_intern",
+        "//asserts",
+    ],
+)
+
+cc_test(
+    name = "worker_example",
+    srcs = [
+        "worker.c",
+        "worker.h",
+        "worker_example.c",
+    ],
+    linkopts = ["-pthread"],
     deps = [
         "//queue",
-        "//vetor",
     ],
 )
