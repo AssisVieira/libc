@@ -22,9 +22,16 @@ Worker *worker_create(const char *name, WorkerHandler handler,
   return worker;
 }
 
-void worker_send(Worker *worker, const void *msg, size_t size) {
-  void *cloneMsg = malloc(size);
-  memcpy(cloneMsg, msg, size);
+void worker_send(Worker *worker, void *msg, size_t size) {
+  void *cloneMsg = NULL;
+
+  if (size > 0) {
+    cloneMsg = malloc(size);
+    memcpy(cloneMsg, msg, size);
+  } else {
+    cloneMsg = msg;
+  }
+
   queue_add(worker->msgs, cloneMsg, true);
 }
 

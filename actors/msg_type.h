@@ -1,21 +1,21 @@
-#ifndef MSG_SPEC_H
-#define MSG_SPEC_H
+#ifndef MSG_TYPE_H
+#define MSG_TYPE_H
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <threads.h>
 
-typedef size_t MsgType;
+typedef size_t MsgTypeId;
 
-typedef struct MsgSpec {
-  MsgType id;
+typedef struct MsgType {
+  MsgTypeId id;
   char *name;
   size_t paramsSize;
   bool registred;
   mtx_t lock;
-} MsgSpec;
+} MsgType;
 
-void msg_spec_register(const MsgSpec *spec);
+void msg_type_register(const MsgType *type);
 
 /**
  * Defines a new message type that can be addressed by the actors. In
@@ -29,7 +29,7 @@ void msg_spec_register(const MsgSpec *spec);
  */
 #define MESSAGE(msgName, params)                         \
   typedef struct msgName##Params params msgName##Params; \
-  const MsgSpec msgName = {                              \
+  const MsgType msgName = {                              \
       .id = 0,                                           \
       .name = #msgName,                                  \
       .paramsSize = sizeof(msgName##Params),             \

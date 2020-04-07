@@ -1,26 +1,27 @@
 #include "actor.h"
 
 static bool actor_handler(void *context, const void *msg);
+static void actor_send_internal(Actor *from, Actor *to, const MsgType *type,
+                                const void *params, size_t paramsSize);
 
-Actor *actor_create(Actor *parent, const ActorSpec *spec) {
+Actor *actor_create(Actor *parent, const ActorType *type, const char *name,
+                    void *context, const void *initParams,
+                    size_t initParamsSize, ActorDispacher dispacher) {
   Actor *actor = malloc(sizeof(Actor));
   actor->parent = parent;
   actor->numChildren = 0;
-  actor->context = actor_spec_context_create(spec);
-  actor->spec = spec;
-  actor->worker = worker_create(spec->name, actor_handler, sizeof(Actor));
+  actor->context = context;
+  actor->type = type;
+  actor->dispacher = dispacher;
+  actor->worker = worker_create(name, actor_handler, sizeof(Actor));
+
+  actor_send_internal(actor->parent, actor, &Init, initParams, initParamsSize);
+
   return actor;
 }
 
-static Msg *actor_on_closed(Msg *msg) {
-  //
-  actor_destroy(msg->from);
-  //
-}
-
 void actor_close(Actor *actor) {
-  Msg *msg = msg_create(NULL, &Close, NULL);
-  worker_send(actor->worker, msg, sizeof(Msg));
+  actor_send(actor->parent, actor, &Close, NULL);
 }
 
 static void actor_destroy(Actor *actor) {
@@ -28,14 +29,29 @@ static void actor_destroy(Actor *actor) {
   free(actor);
 }
 
+static void actor_send_internal(Actor *from, Actor *to, const MsgType *type,
+                                const void *params, size_t paramsSize) {
+  Msg *msg = msg_create(from, type, params, paramsSize);
+  worker_send(to->worker, msg, 0);
+}
+
+Msg *actor_reply(const MsgType *type, const void *params) {
+  return msg_create(NULL, type, params, type->paramsSize);
+}
+
+void actor_send(Actor *from, Actor *to, const MsgType *type,
+                const void *params) {
+  actor_send_internal(from, to, type, params, type->paramsSize);
+}
+
 static bool actor_handler(void *context, const void *arg) {
   Actor *actor = context;
   const Msg *msg = arg;
 
-  Msg *resp = actor_spec_dispach(actor->spec, actor->context, msg);
+  Msg *resp = actor->dispacher(actor->type, actor->context, msg);
 
   if (resp != NULL) {
-    actor_send(resp->to, resp->from, msg->meta, msg->params);
+    actor_send(actor, msg->from, resp->type, resp->params);
   }
 
   return true;

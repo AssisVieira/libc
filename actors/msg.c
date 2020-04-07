@@ -3,12 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-Msg *msg_create(ActorId from, const MsgSpec *spec, void *params) {
-  Msg *msg = malloc(sizeof(Msg) + spec->paramsSize);
+Msg *msg_create(Actor *from, const MsgType *type, const void *params,
+                size_t paramsSize) {
+  Msg *msg = malloc(sizeof(Msg) + paramsSize);
   msg->from = from;
-  msg->spec = spec;
+  msg->type = type;
   msg->params = msg + sizeof(Msg);
-  memcpy(msg->params, params, spec->paramsSize);
+  memcpy(msg->params, params, paramsSize);
   return msg;
 }
 

@@ -34,7 +34,7 @@ typedef struct Worker {
 Worker *worker_create(const char *name, WorkerHandler handler,
                       size_t contextSize);
 
-void worker_send(Worker *worker, const void *msg, size_t size);
+void worker_send(Worker *worker, void *msg, size_t size);
 
 void worker_await(Worker *worker);
 
