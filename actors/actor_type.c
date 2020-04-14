@@ -11,11 +11,8 @@ static Msg *actor_type_dispach(ActorType *type, void *context, const Msg *msg);
 
 Actor *actor_type_create_actor(Actor *parent, const ActorType *type,
                                const void *initParams) {
-  void *context = malloc(type->contextSize);
-
   actor_type_register(type);
-
-  return actor_create(parent, type, type->name, context, initParams,
+  return actor_create(parent, type, type->name, type->contextSize, initParams,
                       type->initParamsSize, actor_type_dispach);
 }
 
@@ -61,21 +58,30 @@ static Msg *actor_type_handler_default(const Msg *msg) { return NULL; }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static Msg *actor_type_on_done(const Msg *msg) {
-  return actor_reply(&Close, NULL);
+static bool actor_type_on_done(const Msg *msg) {
+  actor_reply(msg, &Close, NULL);
+  return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static Msg *actor_type_on_close(const Msg *msg) {
-  return actor_reply(&Closed, NULL);
+static bool actor_type_on_close(const Msg *msg) {
+  if (actor_hasChildren()) {
+    actor_closeChildren(msg->me);
+    return true;
+  }
+  return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static Msg *actor_type_on_closed(const Msg *msg) {
-  actor_destroy(msg->from);
-  return NULL;
+  actor_destroy(msg->me, msg->from);
+
+  if (actor_hasChildren(msg->me))
+    return true;
+  
+  return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

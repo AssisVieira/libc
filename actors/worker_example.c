@@ -19,10 +19,14 @@ typedef struct Msg {
   int num;
 } Msg;
 
-static bool handle(void *context, const void *arg);
+static WorkerState actor_on_message(void *context, const void *arg);
+static WorkerState actor_on_signal(void *context, const void *arg);
 
 int main() {
-  Worker *worker = worker_create("Worker 1", handle, sizeof(MyContext));
+  Worker *worker = worker_create("Worker 1", 
+      actor_on_signal, 
+      actor_on_message, 
+      sizeof(MyContext));
 
   Msg msg0 = {.type = MSG_INIT};
   worker_send(worker, &msg0, sizeof(msg0));
@@ -46,26 +50,37 @@ int main() {
   return 0;
 }
 
-static bool handle(void *context, const void *arg) {
+static WorkerState actor_on_signal(void *context, const void *msg) {
+  if (msg == &Init) {
+    
+  }
+  if (msg == &Close) {
+
+  }
+}
+
+static WorkerState actor_on_message(void *context, const void *arg) {
   MyContext *ctx = context;
   const Msg *msg = arg;
 
   switch (msg->type) {
     case MSG_INIT:
       ctx->res = 0;
-      return true;
+      return actor_on_message;
     case MSG_ADD:
       printf("ADD: %d\n", msg->num);
       ctx->res += msg->num;
-      return true;
+      return actor_on_message;
     case MSG_SUB:
       printf("SUB: %d\n", msg->num);
       ctx->res -= msg->num;
-      return true;
+      return actor_on_message;
     case MSG_QUIT:
       printf("QUIT: %d\n", ctx->res);
-      return false;
+      return worker_state_stop;
     default:
-      return true;
+      return actor_on_message;
   }
 }
+
+
