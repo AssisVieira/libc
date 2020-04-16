@@ -23,15 +23,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <threads.h>
+#include <pthread.h>
 
 typedef struct Queue {
   size_t reader;
   size_t writer;
   size_t max;
-  mtx_t mutex;
-  cnd_t notEmpty;
-  cnd_t notFull;
+  pthread_mutex_t mutex;
+  pthread_cond_t notEmpty;
+  pthread_cond_t notFull;
   void *items[];
 } Queue;
 
@@ -43,30 +43,15 @@ Queue *queue_create(size_t max) {
   // Adds the dummy node.
   max = max + 1;
 
-queue = malloc(sizeof(Queue) + (sizeof(void *) * max));
+  queue = malloc(sizeof(Queue) + (sizeof(void *) * max));
 
   if (queue == NULL) {
     return NULL;
   }
 
-  if (mtx_init(&queue->mutex, mtx_plain)) {
-    free(queue);
-    perror("mtx_init()\n");
-    return NULL;
-  }
-
-  if (cnd_init(&queue->notEmpty)) {
-    free(queue);
-    perror("cnd_init()\n");
-    return NULL;
-  }
-
-  if (cnd_init(&queue->notFull)) {
-    free(queue);
-    perror("cnd_init()\n");
-    return NULL;
-  }
-
+  queue->mutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
+  queue->notEmpty = (pthread_cond_t) PTHREAD_COND_INITIALIZER;
+  queue->notFull = (pthread_cond_t) PTHREAD_COND_INITIALIZER;
   queue->reader = 0;
   queue->writer = 0;
   queue->max = max;
@@ -78,41 +63,41 @@ void queue_destroy(Queue *queue) { free(queue); }
 
 bool queue_add(Queue *queue, void *item, bool wait) {
   if (item == NULL) return false;
-  mtx_lock(&queue->mutex);
+  pthread_mutex_lock(&queue->mutex);
   while (true) {
     size_t newWriter = (queue->writer + 1) % queue->max;
     if (newWriter == queue->reader) {
       if (wait) {
-        cnd_wait(&queue->notFull, &queue->mutex);
+        pthread_cond_wait(&queue->notFull, &queue->mutex);
         continue;
       } else {
-        mtx_unlock(&queue->mutex);
+        pthread_mutex_unlock(&queue->mutex);
         return false;
       }
     }
     queue->items[queue->writer] = item;
     queue->writer = newWriter;
-    cnd_signal(&queue->notEmpty);
+    pthread_cond_signal(&queue->notEmpty);
     break;
   }
-  mtx_unlock(&queue->mutex);
+  pthread_mutex_unlock(&queue->mutex);
   return true;
 }
 
 void *queue_get(Queue *queue, bool wait) {
-  mtx_lock(&queue->mutex);
+  pthread_mutex_lock(&queue->mutex);
   while (queue->reader == queue->writer) {
     if (wait) {
-      cnd_wait(&queue->notEmpty, &queue->mutex);
+      pthread_cond_wait(&queue->notEmpty, &queue->mutex);
     } else {
-      mtx_unlock(&queue->mutex);
+      pthread_mutex_unlock(&queue->mutex);
       return NULL;
     }
   }
   void *item = queue->items[queue->reader];
   queue->reader = (queue->reader + 1) % queue->max;
-  cnd_signal(&queue->notFull);
-  mtx_unlock(&queue->mutex);
+  pthread_cond_signal(&queue->notFull);
+  pthread_mutex_unlock(&queue->mutex);
   return item;
 }
 
@@ -121,7 +106,7 @@ size_t queue_count(Queue *queue) {
 
   if (queue == NULL) return 0;
 
-  mtx_lock(&queue->mutex);
+  pthread_mutex_lock(&queue->mutex);
 
   if (queue->writer >= queue->reader) {
     // [0][1][2][3][4]
@@ -135,7 +120,7 @@ size_t queue_count(Queue *queue) {
     count = queue->max - queue->reader + queue->writer;
   }
 
-  mtx_unlock(&queue->mutex);
+  pthread_mutex_unlock(&queue->mutex);
 
   return count;
 }

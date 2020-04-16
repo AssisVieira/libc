@@ -19,7 +19,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <threads.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include "asserts/asserts.h"
 
@@ -29,12 +30,12 @@ static void testCreate() {
   {
     Queue *queue = queue_create(0);
     assert(queue == NULL);
-    assertIntEqual(queue_count(queue), 0);
+    assertEqual(queue_count(queue), 0);
   }
   {
     Queue *queue = queue_create(1);
     assert(queue != NULL);
-    assertIntEqual(queue_count(queue), 0);
+    assertEqual(queue_count(queue), 0);
     queue_destroy(queue);
   }
 }
@@ -59,7 +60,7 @@ static void testAdd() {
 
 static void testGet() {
   Queue *queue = queue_create(3);
-  assertIntEqual(queue_count(queue), 0);
+  assertEqual(queue_count(queue), 0);
 
   assert(queue_add(queue, "a", true));
   assert(queue_count(queue) == 1);
@@ -71,14 +72,14 @@ static void testGet() {
   assert(queue_count(queue) == 1);
 
   assert(strcmp(queue_get(queue, true), "b") == 0);
-  assertIntEqual(queue_count(queue), 0);
+  assertEqual(queue_count(queue), 0);
 
   assertNull(queue_get(queue, false));
 
   queue_destroy(queue);
 }
 
-static int testFastConsumer(void *arg) {
+static void * testFastConsumer(void *arg) {
   Queue *queue = arg;
   char *item = NULL;
 #ifdef DEBUG
@@ -108,16 +109,15 @@ static int testFastConsumer(void *arg) {
   fflush(stdout);
 #endif
 
-  return 0;
+  return NULL;
 }
 
-static int testSlowConsumer(void *arg) {
+static void * testSlowConsumer(void *arg) {
   Queue *queue = arg;
   char *item = NULL;
 
   while (true) {
-    // sleep 0.1ms
-    thrd_sleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 100000}, NULL);
+    usleep(1000);
 
     item = queue_get(queue, true);
 
@@ -131,18 +131,17 @@ static int testSlowConsumer(void *arg) {
   assert(strcmp(item, "end") == 0);
   free(item);
 
-  return 0;
+  return NULL;
 }
 
-static int testSlowProducer(void *arg) {
+static void * testSlowProducer(void *arg) {
   Queue *queue = arg;
 #ifdef DEBUG
   size_t count = 0;
 #endif
 
   for (int i = 0; i < 10000; i++) {
-    // sleep 0.1ms
-    thrd_sleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 100000}, NULL);
+    usleep(1000);
 
     queue_add(queue, strdup("abc"), true);
 
@@ -157,10 +156,10 @@ static int testSlowProducer(void *arg) {
   fflush(stdout);
 #endif
 
-  return 0;
+  return NULL;
 }
 
-static int testFastProducer(void *arg) {
+static void * testFastProducer(void *arg) {
   Queue *queue = arg;
 #ifdef DEBUG
   size_t count = 0;
@@ -179,66 +178,66 @@ static int testFastProducer(void *arg) {
   fflush(stdout);
 #endif
 
-  return 0;
+  return NULL;
 }
 
-static void testSingleProducerSingleConsumer(int (*fnProducer)(void *),
-                                             int (*fnConsumer)(void *)) {
-  thrd_t tProducer;
-  thrd_t tConsumer;
+static void testSingleProducerSingleConsumer(void *(*fnProducer)(void *),
+                                             void *(*fnConsumer)(void *)) {
+  pthread_t tProducer;
+  pthread_t tConsumer;
   Queue *queue = queue_create(100);
 
-  thrd_create(&tProducer, fnProducer, queue);
-  thrd_create(&tConsumer, fnConsumer, queue);
+  pthread_create(&tProducer, NULL, fnProducer, queue);
+  pthread_create(&tConsumer, NULL, fnConsumer, queue);
 
-  thrd_join(tProducer, NULL);
+  pthread_join(tProducer, NULL);
 
   char *item = strdup("end");
   queue_add(queue, item, true);
 
-  thrd_join(tConsumer, NULL);
+  pthread_join(tConsumer, NULL);
 
-  assertIntEqual(queue_count(queue), 0);
+  assertEqual(queue_count(queue), 0);
 
   queue_destroy(queue);
 }
 
-static void testManyProducerSingleConsumer(int (*fnProducer)(void *),
-                                           int (*fnConsumer)(void *)) {
-  thrd_t tProducer1;
-  thrd_t tProducer2;
-  thrd_t tConsumer;
+static void testManyProducerSingleConsumer(void *(*fnProducer)(void *),
+                                           void *(*fnConsumer)(void *)) {
+  pthread_t tProducer1;
+  pthread_t tProducer2;
+  pthread_t tConsumer;
   Queue *queue = queue_create(100);
 
-  thrd_create(&tProducer1, fnProducer, queue);
-  thrd_create(&tProducer2, fnProducer, queue);
-  thrd_create(&tConsumer, fnConsumer, queue);
+  pthread_create(&tProducer1, NULL, fnProducer, queue);
+  pthread_create(&tProducer2, NULL, fnProducer, queue);
+  pthread_create(&tConsumer, NULL, fnConsumer, queue);
 
-  thrd_join(tProducer1, NULL);
-  thrd_join(tProducer2, NULL);
+  pthread_join(tProducer1, NULL);
+  pthread_join(tProducer2, NULL);
 
   char *item = strdup("end");
   queue_add(queue, item, true);
 
-  thrd_join(tConsumer, NULL);
+  pthread_join(tConsumer, NULL);
 
-  assertIntEqual(queue_count(queue), 0);
+  assertEqual(queue_count(queue), 0);
 
   queue_destroy(queue);
 }
 
-static void testSingleProducerManyConsumer(int (*fnProducer)(void *),
-                                           int (*fnConsumer)(void *)) {
-  thrd_t tProducer1;
-  thrd_t tConsumer1;
-  thrd_t tConsumer2;
+static void testSingleProducerManyConsumer(void *(*fnProducer)(void *),
+                                           void *(*fnConsumer)(void *)) {
+  pthread_t tProducer1;
+  pthread_t tConsumer1;
+  pthread_t tConsumer2;
   Queue *queue = queue_create(100);
 
-  thrd_create(&tProducer1, fnProducer, queue);
-  thrd_create(&tConsumer1, fnConsumer, queue);
-  thrd_create(&tConsumer2, fnConsumer, queue);
+  pthread_create(&tProducer1, NULL, fnProducer, queue);
+  pthread_create(&tConsumer1, NULL, fnConsumer, queue);
+  pthread_create(&tConsumer2, NULL, fnConsumer, queue);
 
-  thrd_join(tProducer1, NULL);
+  pthread_join(tProducer1, NULL);
 
   char *item1 = strdup("end");
   queue_add(queue, item1, true);
@@ -246,29 +245,29 @@ static void testSingleProducerManyConsumer(int (*fnProducer)(void *),
   char *item2 = strdup("end");
   queue_add(queue, item2, true);
 
-  thrd_join(tConsumer1, NULL);
-  thrd_join(tConsumer2, NULL);
+  pthread_join(tConsumer1, NULL);
+  pthread_join(tConsumer2, NULL);
 
-  assertIntEqual(queue_count(queue), 0);
+  assertEqual(queue_count(queue), 0);
 
   queue_destroy(queue);
 }
 
-static void testManyProducerManyConsumer(int (*fnProducer)(void *),
-                                         int (*fnConsumer)(void *)) {
-  thrd_t tProducer1;
-  thrd_t tProducer2;
-  thrd_t tConsumer1;
-  thrd_t tConsumer2;
+static void testManyProducerManyConsumer(void *(*fnProducer)(void *),
+                                         void *(*fnConsumer)(void *)) {
+  pthread_t tProducer1;
+  pthread_t tProducer2;
+  pthread_t tConsumer1;
+  pthread_t tConsumer2;
   Queue *queue = queue_create(100);
 
-  thrd_create(&tProducer1, fnProducer, queue);
-  thrd_create(&tProducer2, fnProducer, queue);
-  thrd_create(&tConsumer1, fnConsumer, queue);
-  thrd_create(&tConsumer2, fnConsumer, queue);
+  pthread_create(&tProducer1, NULL, fnProducer, queue);
+  pthread_create(&tProducer2, NULL, fnProducer, queue);
+  pthread_create(&tConsumer1, NULL, fnConsumer, queue);
+  pthread_create(&tConsumer2, NULL, fnConsumer, queue);
 
-  thrd_join(tProducer1, NULL);
-  thrd_join(tProducer2, NULL);
+  pthread_join(tProducer1, NULL);
+  pthread_join(tProducer2, NULL);
 
   char *item1 = strdup("end");
   queue_add(queue, item1, true);
@@ -276,10 +275,10 @@ static void testManyProducerManyConsumer(int (*fnProducer)(void *),
   char *item2 = strdup("end");
   queue_add(queue, item2, true);
 
-  thrd_join(tConsumer1, NULL);
-  thrd_join(tConsumer2, NULL);
+  pthread_join(tConsumer1, NULL);
+  pthread_join(tConsumer2, NULL);
 
-  assertIntEqual(queue_count(queue), 0);
+  assertEqual(queue_count(queue), 0);
 
   queue_destroy(queue);
 }

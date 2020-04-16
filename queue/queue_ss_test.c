@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <threads.h>
+#include <pthread.h>
 
 #include "queue_ss.h"
 
@@ -66,7 +66,7 @@ static void testGet() {
   queue_ss_destroy(queue);
 }
 
-static int testConsumer(void *arg) {
+static void * testConsumer(void *arg) {
   QueueSS *queue = arg;
   char *item = NULL;
   int count = 0;
@@ -74,7 +74,7 @@ static int testConsumer(void *arg) {
   while (true) {
     ++count;
 
-    while ((item = queue_ss_get(queue)) == NULL) thrd_yield();
+    while ((item = queue_ss_get(queue)) == NULL) pthread_yield();
 
     if (strcmp(item, "abc")) break;
 
@@ -88,33 +88,33 @@ static int testConsumer(void *arg) {
 
   assert(count == 1000001);
 
-  return 0;
+  return NULL;
 }
 
-static int testProducer(void *arg) {
+static void * testProducer(void *arg) {
   QueueSS *queue = arg;
 
   for (int i = 0; i < 1000000; i++) {
     char *item = strdup("abc");
-    while (!queue_ss_add(queue, item)) thrd_yield();
+    while (!queue_ss_add(queue, item)) pthread_yield();
   }
 
   char *item = strdup("end");
-  while (!queue_ss_add(queue, item)) thrd_yield();
+  while (!queue_ss_add(queue, item)) pthread_yield();
 
-  return 0;
+  return NULL;
 }
 
 static void testSingleProducerSingleConsumer() {
-  thrd_t tProducer;
-  thrd_t tConsumer;
+  pthread_t tProducer;
+  pthread_t tConsumer;
   QueueSS *queue = queue_ss_create(100);
 
-  thrd_create(&tProducer, testProducer, queue);
-  thrd_create(&tConsumer, testConsumer, queue);
+  pthread_create(&tProducer, NULL, testProducer, queue);
+  pthread_create(&tConsumer, NULL, testConsumer, queue);
 
-  thrd_join(tProducer, NULL);
-  thrd_join(tConsumer, NULL);
+  pthread_join(tProducer, NULL);
+  pthread_join(tConsumer, NULL);
 
   queue_ss_destroy(queue);
 }
