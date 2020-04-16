@@ -31,38 +31,38 @@
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <threads.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <assert.h>
 
 #include "io/io.h"
 
-static thrd_t startServer();
+static pthread_t startServer();
 static void onServerEvent(void *context, int fd, IOEvent event);
-static thrd_t clientConnect();
-static int clientTask(void *arg);
-static int serverTask(void *arg);
+static pthread_t clientConnect();
+static void * clientTask(void *arg);
+static void * serverTask(void *arg);
 
 static bool eventReadThrowred = false;
 
 int main() {
-  int resClient;
-  int resServer;
+  void *resClient = NULL;
+  void *resServer = NULL;
 
-  thrd_t thServer = startServer();
+  pthread_t thServer = startServer();
 
-  thrd_t thClient = clientConnect();
+  pthread_t thClient = clientConnect();
 
-  assert(thrd_join(thServer, &resServer) == 0);
-  assert(thrd_join(thClient, &resClient) == 0);
+  assert(pthread_join(thServer, &resServer) == 0);
+  assert(pthread_join(thClient, &resClient) == 0);
 
-  assert(resClient == 0);
-  assert(resServer == 0);
+  assert(resClient == NULL);
+  assert(resServer == NULL);
 
   return 0;
 }
 
-static int clientTask(void *arg) {
+static void * clientTask(void *arg) {
   int fd = -1;
 
   struct sockaddr_in address = {0};
@@ -78,13 +78,13 @@ static int clientTask(void *arg) {
 
   assert(close(fd) == 0);
 
-  return 0;
+  return NULL;
 }
 
-static thrd_t clientConnect() {
-  thrd_t thread;
+static pthread_t clientConnect() {
+  pthread_t thread;
 
-  assert(thrd_create(&thread, clientTask, NULL) == 0);
+  assert(pthread_create(&thread, NULL, clientTask, NULL) == 0);
 
   return thread;
 }
@@ -99,7 +99,7 @@ static void onServerEvent(void *context, int fd, IOEvent event) {
   io_close(io_current(), 0);
 }
 
-static int serverTask(void *arg) {
+static void * serverTask(void *arg) {
   IO *io = NULL;
   int fd = -1;
 
@@ -110,42 +110,32 @@ static int serverTask(void *arg) {
 
   fd = socket(AF_INET, SOCK_STREAM, 0);
 
-  if (fd == -1) return -1;
+  if (fd == -1) return NULL;
 
   int reusePortEnabled = 1;
 
-  if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &reusePortEnabled,
-                 sizeof(reusePortEnabled))) {
-    close(fd);
-    return -1;
-  }
+  assert(setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &reusePortEnabled,
+        sizeof(reusePortEnabled)) == 0);
 
-  if (bind(fd, &address, sizeof(address))) {
-    close(fd);
-    return -1;
-  }
+  assert(bind(fd, &address, sizeof(address)) == 0);
 
-  if (fcntl(fd, F_SETFL, O_NONBLOCK)) {
-    close(fd);
-    return -1;
-  }
+  assert(fcntl(fd, F_SETFL, O_NONBLOCK) == 0);
 
-  if (listen(fd, 10)) {
-    close(fd);
-    return -1;
-  }
+  assert(listen(fd, 10) == 0);
 
   io = io_new();
 
   assert(io_add(io, fd, IO_READ | IO_EDGE_TRIGGERED, NULL, onServerEvent) == 0);
 
-  return io_run(io, 10);
+  assert(io_run(io, 10) == 0);
+
+  return NULL;
 }
 
-static thrd_t startServer() {
-  thrd_t thread;
+static pthread_t startServer() {
+  pthread_t thread;
 
-  assert(thrd_create(&thread, serverTask, NULL) == 0);
+  assert(pthread_create(&thread, NULL, serverTask, NULL) == 0);
 
   return thread;
 }
