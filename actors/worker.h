@@ -31,6 +31,12 @@ typedef struct Worker {
   void *context;
 } Worker;
 
+typedef void (*WorkerState)(Worker *worker);
+
+typedef int WorkerSignal;
+
+extern const WorkerSignal Close;
+
 Worker *worker_create(const char *name, WorkerHandler handler,
                       size_t contextSize);
 
