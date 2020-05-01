@@ -22,6 +22,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <math.h>
 
 #include "log/log.h"
 #include "queue/queue.h"
@@ -419,7 +421,12 @@ static int db_begin(DB *db) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
+// TODO retornar 0, se não houve nenhum erro durante toda a operação com a conexão,
+//               1, caso contrário.
+//               Em casos em que a operação é apenas um select, se a chamada para 
+//               db_close() retornar -1, logo toda a consulta deve ser descartada.
+//               Erros em consulta podem acontecer na conversão de tipos, 
+//               consequentemente na leitura equivocada de algum dado.
 void db_close(DB *db) {
   if (db == NULL) return;
 
@@ -520,15 +527,16 @@ double db_valueDouble(DB *db, int nReg, int nCol) {
   const char *value = db_value(db, nReg, nCol);
   char *p = NULL;
   x = strtod(value, &p);
-  if ((x == 0 || x == HUGE_VAL) && errno == ERANGE) {
-    perror("%s(): erange.\n", __FUNCTION__);
+  if ((x == 0 || x == HUGE_VALF || x == HUGE_VALL) && errno == ERANGE) {
+    fprintf(stderr, "%s(): erange.\n", __FUNCTION__);
     db->error = true;
     return 0;
   }
+  return x;
 }
 
 int db_valueInt(DB *db, int nReg, int nCol) {
-
+  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
