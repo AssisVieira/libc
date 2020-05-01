@@ -33,22 +33,6 @@ static int read_int(const char *label, int *num) {
   return r;
 }
 
-#if 0
-static int read_float(const char *label, float *num) {
-  int r = 0;
-  do {
-    float tmp = 0;
-    printf("%s [%f]: ", label, *num);
-    r = scanf("%f", &tmp);
-    while (getchar() != '\n');
-    if (r != EOF) {
-      *num = tmp;
-    }
-  } while (r == EOF);
-  return r;
-}
-#endif
-
 static int read_double(const char *label, double *num) {
   int r = 0;
   do {
@@ -87,7 +71,25 @@ void control_produto_add() {
 }
 
 void control_produto_list() { 
-  printf("Listar produtos\n");
+  Produto produtos[10] = {0};
+  int count;
+
+  count = produto_buscar(produtos, 0, 10);
+
+  if (count < 0) {
+    printf("Erro ao obter produtos.\n");
+    return;
+  } else if (count == 0) {
+    printf("Nenhum produto cadastrado.\n");
+    return;
+  }
+
+  for (int i = 0; i < count; i++) {
+    printf("#%s - %s (R$ %.2lf)\n", produtos[i].codigo, 
+        produtos[i].nome, 
+        produtos[i].preco);
+  }
+  
 }
 
 void control_produto_edit() { 
