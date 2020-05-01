@@ -86,5 +86,7 @@ comportamentos:
 
   b) Se o ator estiver ocioso, então agenda o ator com o mesmo worker.
 
+  c) 
+
 
 
