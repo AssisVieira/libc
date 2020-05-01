@@ -143,6 +143,7 @@ void db_clear(DB *db);
  */
 void db_param(DB *db, const char *value);
 void db_paramInt(DB *db, int value);
+void db_paramDouble(DB *db, double value);
 
 /**
  * Executa um comando sql de forma assíncrona. Esta função deve ser sempre
@@ -174,6 +175,8 @@ int db_exec(DB *db);
  * @return      valor do campo.
  */
 const char *db_value(DB *db, int nReg, int nCol);
+double db_valueDouble(DB *db, int nReg, int nCol);
+int db_valueInt(DB *db, int nReg, int nCol);
 
 /**
  * Obtém a quantidade de registros retornado pelo comando sql.

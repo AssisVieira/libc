@@ -322,6 +322,16 @@ void db_paramInt(DB *db, int value) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void db_paramDouble(DB *db, double value) {
+  if (db_error(db)) return;
+  size_t size = 62;
+  char *buff = malloc(size);
+  snprintf(buff, size, "%lf", value);
+  db->params[db->paramsLen++] = buff;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void db_clear(DB *db) {
   if (db_error(db)) return;
 
@@ -503,6 +513,22 @@ size_t db_count(DB *db) {
 const char *db_value(DB *db, int row, int col) {
   if (db == NULL) return NULL;
   return PQgetvalue(db->result, row, col);
+}
+
+double db_valueDouble(DB *db, int nReg, int nCol) {
+  double x;
+  const char *value = db_value(db, nReg, nCol);
+  char *p = NULL;
+  x = strtod(value, &p);
+  if ((x == 0 || x == HUGE_VAL) && errno == ERANGE) {
+    perror("%s(): erange.\n", __FUNCTION__);
+    db->error = true;
+    return 0;
+  }
+}
+
+int db_valueInt(DB *db, int nReg, int nCol) {
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
