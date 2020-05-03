@@ -65,7 +65,7 @@ void db_pool_destroy(DBPool *dbpool);
  * nova conexão é criada se e somente se o número de conexões ocupadas for menor
  * que o número máximo especificado na criação do pool. Veja mais em
  * db_pool_create(). Caso contrário, a função ficará bloqueada até que uma
- * conexão sejá retornada ao pool, usando db_close().
+ * conexão seja retornada ao pool, usando db_close().
  *
  * @return conexão com o banco de dados.
  */
@@ -105,7 +105,7 @@ int db_commit(DB *db);
 
 /**
  * Encerra o uso da conexão e limpa os dados usados até o momento. Se não houver
- * nenhum erro na transação, então efetiva tudo o que ocorreu no block da
+ * nenhum erro na transação, então efetiva tudo o que ocorreu no bloco da
  * transação. Se a conexão foi obtida de um pool, logo a conexão será
  * mantida aberta, sendo apenas devolvida ao pool. A conexão será destruída
  * apenas se uma das seguintes setenças for verdadeira:
@@ -115,8 +115,13 @@ int db_commit(DB *db);
  *        b) O pool estiver desativado.
  *        c) O número de conexões ociosas chegou ao limite máximo.
  * @param db conexão a ser encerrada.
+ * @return 0, em caso de sucesso, -1, em caso de erro na transação. Por isso, 
+ * 	       o retorno da chamada deste método nunca deve ser ignorado. Esse 
+ * 	       conselho também vale para transação composta apenas  por um único
+ * 	       comando select, pois erros na obtenção de dados usando db_value*() 
+ * 	       só são verificados por db_error() ou db_close().
  */
-void db_close(DB *db);
+int db_close(DB *db);
 
 /**
  * Configura o comando sql a ser executado quando db_send() ou db_exec() for

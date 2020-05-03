@@ -421,16 +421,13 @@ static int db_begin(DB *db) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// TODO retornar 0, se não houve nenhum erro durante toda a operação com a conexão,
-//               1, caso contrário.
-//               Em casos em que a operação é apenas um select, se a chamada para 
-//               db_close() retornar -1, logo toda a consulta deve ser descartada.
-//               Erros em consulta podem acontecer na conversão de tipos, 
-//               consequentemente na leitura equivocada de algum dado.
-void db_close(DB *db) {
-  if (db == NULL) return;
 
-  if (!db->error && db->transaction) db_commit_intern(db, false);
+int db_close(DB *db) {
+  if (db == NULL) return db_error(db);
+
+  if (!db->error && db->transaction) {
+	  db_commit_intern(db, false);
+  }
 
   db_clear(db);
 
@@ -443,7 +440,7 @@ void db_close(DB *db) {
       goto destroy;
     }
 
-    return;
+    return db_error(db);
   }
 
 destroy:
@@ -451,6 +448,7 @@ destroy:
   fflush(stdout);
   PQfinish(db->conn);
   free(db);
+  return db_error(db);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
