@@ -1,88 +1,127 @@
+////////////////////////////////////////////////////////////////////////////////
+// Worker
+////////////////////////////////////////////////////////////////////////////////
+
 #include "worker.h"
 
-#include <pthread.h>
-#include <stdatomic.h>
-#include <stdlib.h>
-#include <string.h>
+#include "actorcell.h"
+#include "actorsystem.h"
+#include "dispatcher.h"
+#include "mailbox.h"
 
-const WorkerSignal Close = 1;
+int worker_set_core_affinity(int core) {
+  int numCores = sysconf(_SC_NPROCESSORS_ONLN);
 
-static int worker_loop(void *arg);
-static void worker_destroy(Worker *worker);
+  if (core < 0 || core >= numCores) return EINVAL;
 
-static void worker_state_init(Worker *worker);
-static void worker_state_receive(Worker *worker);
-static void worker_state_close(Worker *worker);
+  cpu_set_t cpuset;
+  CPU_ZERO(&cpuset);
+  CPU_SET(core, &cpuset);
 
-Worker *worker_create(const char *name, WorkerHandler handler,
-                      size_t contextSize) {
+  pthread_t currentThread = pthread_self();
+
+  return pthread_setaffinity_np(currentThread, sizeof(cpu_set_t), &cpuset);
+}
+
+Worker *worker_create(Dispatcher *dispatcher, const char *name, int core,
+                      int throughput, int throughputDeadlineNS) {
   Worker *worker = malloc(sizeof(Worker));
-  worker->close = false;
-  worker->handler = handler;
-  worker->context = malloc(contextSize);
-  worker->msgs = queue_create(WORKER_QUEUE_MAX_SIZE);
-  worker->state = worker_state_init;
+  worker->dispatcher = dispatcher;
+  worker->stop = false;
+  worker->core = core;
+  worker->queue = queue_create(1000);
+  worker->mutex = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
+  worker->condNotEmpty = (pthread_cond_t)PTHREAD_COND_INITIALIZER;
+  worker->throughputDeadlineNS = throughputDeadlineNS;
+  worker->throughput = throughput;
+  worker->name = strdup(name);
 
-  thrd_create(&worker->thread, worker_loop, worker);
- 
+  pthread_create(&worker->thread, NULL, worker_run, worker);
+
   pthread_setname_np(worker->thread, name);
 
   return worker;
 }
 
-void worker_send(Worker *worker, void *msg, size_t size) {
-  void *cloneMsg = NULL;
+void worker_free(Worker *worker) {
+  pthread_join(worker->thread, NULL);
 
-  if (size > 0) {
-    cloneMsg = malloc(size);
-    memcpy(cloneMsg, msg, size);
-  } else {
-    cloneMsg = msg;
+  queue_free(worker->queue);
+
+  free(worker->name);
+
+  free(worker);
+}
+
+void worker_enqueue(Worker *worker, ActorCell *actor) {
+  pthread_mutex_lock(&worker->mutex);
+
+  queue_add(worker->queue, actor);
+
+  pthread_cond_signal(&worker->condNotEmpty);
+
+  pthread_mutex_unlock(&worker->mutex);
+}
+
+long worker_current_time_ns() {
+  long ns;
+  time_t sec;
+  struct timespec spec;
+  const long billion = 1000000000L;
+
+  clock_gettime(CLOCK_REALTIME, &spec);
+  sec = spec.tv_sec;
+  ns = spec.tv_nsec;
+
+  return (uint64_t)sec * billion + (uint64_t)ns;
+}
+
+void *worker_run(void *arg) {
+  Worker *worker = (Worker *)arg;
+
+  if (worker_set_core_affinity(worker->core)) {
+    debug("set core affinity fail.");
   }
 
-  queue_add(worker->msgs, cloneMsg, true);
-}
+  while (!worker->stop) {
+    pthread_mutex_lock(&worker->mutex);
 
-static void worker_state_init(Worker *worker) {
-  worker->state = worker->handle(worker->context, &Init);
-}
+    ActorCell *actor = queue_get(worker->queue);
 
-static void worker_state_receive(Worker *worker) {
-  void *msg = queue_get(worker->msgs, true);
-  worker->state = worker->handle(worker->context, msg);
-  free(msg);
-}
+    if (actor == NULL) {
+      pthread_cond_wait(&worker->condNotEmpty, &worker->mutex);
+    }
 
-static void worker_state_close(Worker *worker) {
-  worker->close = true;
-  worker->handler(worker->context, &Close);
-}
+    pthread_mutex_unlock(&worker->mutex);
 
-static int worker_loop(void *arg) {
-  Worker *worker = arg;
+    if (actor == NULL) continue;
 
-  while (!worker->close) {
-    worker->state(worker);
-  }
+    int leftThroughput = worker->throughput;
+    long deadlineNS = worker_current_time_ns() + worker->throughputDeadlineNS;
+    bool keepGoing = true;
 
-  worker_destroy(worker);
+    while (keepGoing && leftThroughput > 0 &&
+           ((worker->throughputDeadlineNS <= 0) ||
+            (worker_current_time_ns() - deadlineNS < 0))) {
+      keepGoing = actorcell_process(actor);
+      leftThroughput--;
+    }
 
-  return 0;
-}
-
-void worker_await(Worker *worker) { thrd_join(worker->thread, NULL); }
-
-static void worker_destroy(Worker *worker) {
-  while (worker->msgs != NULL) {
-    void *msg = queue_get(worker->msgs, false);
-    if (msg != NULL) {
-      free(msg);
-    } else {
-      queue_destroy(worker->msgs);
-      worker->msgs = NULL;
+    if (keepGoing) {
+      actorcell_set_idle(actor);
+        
+      if (!actorcell_is_empty(actor)) {
+        dispatcher_dispatch(worker->dispatcher, actor);
+      }
     }
   }
 
-  free(worker->context);
-  free(worker);
+  return NULL;
+}
+
+void worker_stop(Worker *worker) {
+  pthread_mutex_lock(&worker->mutex);
+  worker->stop = true;
+  pthread_cond_signal(&worker->condNotEmpty);
+  pthread_mutex_unlock(&worker->mutex);
 }

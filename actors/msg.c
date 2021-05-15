@@ -1,16 +1,27 @@
+////////////////////////////////////////////////////////////////////////////////
+// Msg
+////////////////////////////////////////////////////////////////////////////////
+
 #include "msg.h"
 
-#include <stdlib.h>
-#include <string.h>
+MSG_IMPL(Start);
+MSG_IMPL(Stop);
+MSG_IMPL(Stopped);
 
-Msg *msg_create(Actor *from, const MsgType *type, const void *params,
-                size_t paramsSize) {
-  Msg *msg = malloc(sizeof(Msg) + paramsSize);
-  msg->from = from;
+Msg *msg_create(ActorCell *from, const MsgType *type, const void *payload) {
+  Msg *msg = malloc(sizeof(Msg));
+  msg->payload = calloc(1, type->size);
   msg->type = type;
-  msg->params = msg + sizeof(Msg);
-  memcpy(msg->params, params, paramsSize);
+  msg->from = from;
+
+  if (payload != NULL) {
+    memcpy(msg->payload, payload, type->size);
+  }
+
   return msg;
 }
 
-void msg_destroy(Msg *msg) { free(msg); }
+void msg_free(Msg *msg) {
+  free(msg->payload);
+  free(msg);
+}

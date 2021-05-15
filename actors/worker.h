@@ -1,47 +1,34 @@
-#ifndef WORKER_H
-#define WORKER_H
+////////////////////////////////////////////////////////////////////////////////
+// Worker
+////////////////////////////////////////////////////////////////////////////////
 
-#include <stdatomic.h>
-#include <stdbool.h>
-#include <stddef.h>
-#include <threads.h>
+#ifndef WORKER_INCLUDE_H
+#define WORKER_INCLUDE_H
 
-#include "queue/queue.h"
+#include "foundation/foundation.h"
 
-#define WORKER_QUEUE_MAX_SIZE 4096
-
-typedef struct Worker Worker;
-
-/**
- * Handle the messages sent to the worker.
- *
- * @param context  mutable local storage of worker.
- * @param msg      message to be handled.
- * @return         true, if you want to continue processing the messages,
- *                 otherwise, false. In this second case, the worker will be
- *                 closed.
- */
-typedef bool (*WorkerHandler)(void *context, const void *msg);
+typedef struct Dispatcher Dispatcher;
+typedef struct ActorCell ActorCell;
 
 typedef struct Worker {
-  Queue *msgs;
-  WorkerHandler handler;
-  thrd_t thread;
-  atomic_bool close;
-  void *context;
+  pthread_t thread;
+  Queue *queue;
+  atomic_bool stop;
+  pthread_cond_t condNotEmpty;
+  pthread_mutex_t mutex;
+  int throughput;
+  int throughputDeadlineNS;
+  Dispatcher *dispatcher;
+  int core;
+  char *name;
 } Worker;
 
-typedef void (*WorkerState)(Worker *worker);
-
-typedef int WorkerSignal;
-
-extern const WorkerSignal Close;
-
-Worker *worker_create(const char *name, WorkerHandler handler,
-                      size_t contextSize);
-
-void worker_send(Worker *worker, void *msg, size_t size);
-
-void worker_await(Worker *worker);
+int worker_set_core_affinity(int core);
+Worker *worker_create(Dispatcher *dispatcher, const char *name, int core, int throughput, int throughputDeadlineNS);
+void worker_free(Worker *worker);
+void worker_enqueue(Worker *worker, ActorCell *actor);
+long worker_current_time_ns();
+void *worker_run(void *arg);
+void worker_stop(Worker *worker);
 
 #endif

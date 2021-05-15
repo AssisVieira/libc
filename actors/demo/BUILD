@@ -16,14 +16,10 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
-cc_library(
-    name = "actors",
-    srcs = glob(["*.c", "*.h", 
-                 "foundation/*.h", "foundation/*.c", 
-                 "standard/*.h", "standard/*.c"]),
-    hdrs = ["actors.h"],
-    linkopts = ["-pthread"],
+cc_binary(
+    name = "demo",
+    srcs = glob(["*.c", "*.h"]),
     visibility = ["//visibility:public"],
-    linkstatic = True
+    deps = ["//actors"]
 )
 
